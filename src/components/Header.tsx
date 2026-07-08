@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { fetchRepo, type RepoInfo, type Settings } from "../lib/ipc";
+import { fetchRepo, pullRepo, type RepoInfo, type Settings } from "../lib/ipc";
 import { useDismiss } from "./ContextMenu";
 
 function ChevronDownIcon() {
@@ -27,6 +27,25 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
       <path d="M21 3v5h-5" />
       <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
       <path d="M8 16H3v5" />
+    </svg>
+  );
+}
+
+function PullIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={spinning ? "animate-pulse" : undefined}
+    >
+      <path d="M12 5v13" />
+      <path d="m6 12 6 6 6-6" />
     </svg>
   );
 }
@@ -64,6 +83,7 @@ export function Header({
 }) {
   const [open, setOpen] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const switcherRef = useRef<HTMLDivElement>(null);
   useDismiss(switcherRef, () => setOpen(false));
 
@@ -77,6 +97,18 @@ export function Header({
       })
       .catch((e: unknown) => onToast(String(e)))
       .finally(() => setFetching(false));
+  };
+
+  const doPull = () => {
+    if (!activeRepo || pulling) return;
+    setPulling(true);
+    pullRepo(activeRepo.id)
+      .then(() => {
+        onToast("Pulled");
+        onChanged();
+      })
+      .catch((e: unknown) => onToast(String(e)))
+      .finally(() => setPulling(false));
   };
 
   return (
@@ -138,6 +170,7 @@ export function Header({
 
       <button
         className={iconBtn}
+        aria-label="Fetch"
         title="Fetch"
         disabled={!activeRepo || fetching}
         onClick={doFetch}
@@ -145,7 +178,17 @@ export function Header({
         <RefreshIcon spinning={fetching} />
       </button>
       <button
+        className={iconBtn}
+        aria-label="Pull"
+        title="Pull"
+        disabled={!activeRepo || pulling}
+        onClick={doPull}
+      >
+        <PullIcon spinning={pulling} />
+      </button>
+      <button
         className={`${iconBtn} ${inSettings ? "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200" : ""}`}
+        aria-label="Settings"
         title="Settings"
         onClick={onToggleSettings}
       >

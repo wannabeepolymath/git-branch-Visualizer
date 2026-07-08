@@ -68,7 +68,7 @@ export default function App() {
     return () => {
       live = false;
     };
-  }, [repoId, refreshKey, show]);
+  }, [repoId, refreshKey, settings?.showRemoteBranches, show]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -131,7 +131,13 @@ export default function App() {
         onToast={show}
       />
       {view === "settings" ? (
-        <SettingsView onBack={() => setView("main")} />
+        <SettingsView
+          settings={settings}
+          onSettingsChange={setSettings}
+          onBack={() => setView("main")}
+          onAddRepo={() => void addRepository()}
+          onToast={show}
+        />
       ) : !activeRepo ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3">
           <div className="text-center">
