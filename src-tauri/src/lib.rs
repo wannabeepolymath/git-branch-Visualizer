@@ -56,10 +56,18 @@ pub fn run() {
             commands::pull_repo,
         ])
         .on_window_event(|window, event| {
-            // Dismiss the popover when it loses focus (blur).
+            // Dismiss the popover when it loses focus (blur) — unless the blur
+            // was caused by a native dialog we opened (e.g. the folder picker).
             if let WindowEvent::Focused(false) = event {
                 if window.label() == MAIN_WINDOW {
-                    let _ = window.hide();
+                    let dialog_open = window
+                        .app_handle()
+                        .try_state::<AppState>()
+                        .map(|s| s.dialog_open.load(std::sync::atomic::Ordering::SeqCst))
+                        .unwrap_or(false);
+                    if !dialog_open {
+                        let _ = window.hide();
+                    }
                 }
             }
         })

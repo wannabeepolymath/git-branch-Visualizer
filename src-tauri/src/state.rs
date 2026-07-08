@@ -5,6 +5,7 @@ use notify::RecommendedWatcher;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +46,8 @@ pub struct AppState {
     pub settings: Mutex<Settings>,
     pub config_path: PathBuf,
     pub watchers: Mutex<HashMap<String, RecommendedWatcher>>,
+    /// True while a native dialog is open — suppresses the popover's hide-on-blur.
+    pub dialog_open: AtomicBool,
 }
 
 impl AppState {
@@ -58,6 +61,7 @@ impl AppState {
             settings: Mutex::new(settings),
             config_path,
             watchers: Mutex::new(HashMap::new()),
+            dialog_open: AtomicBool::new(false),
         }
     }
 

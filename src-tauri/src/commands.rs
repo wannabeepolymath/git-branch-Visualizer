@@ -57,16 +57,34 @@ pub fn update_settings(
 
 #[tauri::command]
 pub async fn pick_repo_folder(app: AppHandle) -> Result<Option<String>, String> {
+    use std::sync::atomic::Ordering;
+    use tauri::Manager;
+
+    // Flag the dialog so the popover's hide-on-blur doesn't fire while the
+    // native picker holds focus (the picker steals focus from the popover).
+    let state: State<AppState> = app.state();
+    state.dialog_open.store(true, Ordering::SeqCst);
+
     // The blocking picker must not run on the main thread; use the async callback
     // and wait on a channel (the dialog runs on the event loop meanwhile).
     let (tx, rx) = std::sync::mpsc::channel();
-    app.dialog()
-        .file()
-        .pick_folder(move |f| {
-            let _ = tx.send(f);
-        });
-    let picked = rx.recv().map_err(|e| e.to_string())?;
-    Ok(picked.map(|p| p.to_string()))
+    let mut dialog = app.dialog().file();
+    let window = app.get_webview_window(crate::MAIN_WINDOW);
+    if let Some(w) = &window {
+        dialog = dialog.set_parent(w);
+    }
+    dialog.pick_folder(move |f| {
+        let _ = tx.send(f);
+    });
+    let picked = rx.recv().map_err(|e| e.to_string());
+
+    state.dialog_open.store(false, Ordering::SeqCst);
+    // Bring the popover back to front so the user lands where they left off.
+    if let Some(w) = &window {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+    Ok(picked?.map(|p| p.to_string()))
 }
 
 #[tauri::command]
