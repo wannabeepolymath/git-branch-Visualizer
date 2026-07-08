@@ -21,6 +21,15 @@ export default function App() {
   const [selectedRef, setSelectedRef] = useState<string | null>(null);
   const [view, setView] = useState<"main" | "settings">("main");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showSidebar, setShowSidebar] = useState(() => localStorage.getItem("bv.sidebar") !== "0");
+  const toggleSidebar = useCallback(
+    () =>
+      setShowSidebar((v) => {
+        localStorage.setItem("bv.sidebar", v ? "0" : "1");
+        return !v;
+      }),
+    [],
+  );
   const { toast, show } = useToast();
 
   const activeRepo = settings?.repos.find((r) => r.id === settings.activeRepoId) ?? null;
@@ -124,6 +133,8 @@ export default function App() {
         settings={settings}
         activeRepo={activeRepo}
         inSettings={view === "settings"}
+        sidebarVisible={showSidebar}
+        onToggleSidebar={toggleSidebar}
         onSwitchRepo={(id) => void switchRepo(id)}
         onAddRepo={() => void addRepository()}
         onToggleSettings={() => setView((v) => (v === "settings" ? "main" : "settings"))}
@@ -157,16 +168,18 @@ export default function App() {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <BranchPane
-            key={activeRepo.id}
-            repoId={activeRepo.id}
-            branches={branches}
-            selectedRef={selectedRef}
-            onSelect={setSelectedRef}
-            showRemoteDefault={settings.showRemoteBranches}
-            onToast={show}
-            onChanged={refresh}
-          />
+          {showSidebar && (
+            <BranchPane
+              key={activeRepo.id}
+              repoId={activeRepo.id}
+              branches={branches}
+              selectedRef={selectedRef}
+              onSelect={setSelectedRef}
+              showRemoteDefault={settings.showRemoteBranches}
+              onToast={show}
+              onChanged={refresh}
+            />
+          )}
           <CommitGraph
             repoId={activeRepo.id}
             refName={selectedRef}

@@ -50,6 +50,16 @@ function PullIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
+function PanelLeftIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+      {open && <rect width="3" height="12" x="4.5" y="6" rx="1" fill="currentColor" stroke="none" />}
+    </svg>
+  );
+}
+
 function GearIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -66,6 +76,8 @@ export function Header({
   settings,
   activeRepo,
   inSettings,
+  sidebarVisible,
+  onToggleSidebar,
   onSwitchRepo,
   onAddRepo,
   onToggleSettings,
@@ -75,6 +87,8 @@ export function Header({
   settings: Settings;
   activeRepo: RepoInfo | null;
   inSettings: boolean;
+  sidebarVisible: boolean;
+  onToggleSidebar: () => void;
   onSwitchRepo: (repoId: string) => void;
   onAddRepo: () => void;
   onToggleSettings: () => void;
@@ -168,6 +182,15 @@ export function Header({
 
       <div data-tauri-drag-region="" className="h-full flex-1" />
 
+      <button
+        className={iconBtn}
+        aria-label={sidebarVisible ? "Hide branch panel" : "Show branch panel"}
+        title={sidebarVisible ? "Hide branch panel" : "Show branch panel"}
+        disabled={!activeRepo}
+        onClick={onToggleSidebar}
+      >
+        <PanelLeftIcon open={sidebarVisible} />
+      </button>
       <button
         className={iconBtn}
         aria-label="Fetch"
