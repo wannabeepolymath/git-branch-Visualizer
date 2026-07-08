@@ -162,7 +162,7 @@ export function BranchPane({
   };
 
   return (
-    <div className="flex w-2/5 min-w-0 shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
+    <div className="flex w-full min-w-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
       <div className="p-1.5">
         <input
           value={filter}

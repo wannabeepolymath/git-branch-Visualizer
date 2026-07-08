@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   addRepo,
   getBranches,
@@ -22,6 +22,29 @@ export default function App() {
   const [view, setView] = useState<"main" | "settings">("main");
   const [refreshKey, setRefreshKey] = useState(0);
   const [showSidebar, setShowSidebar] = useState(() => localStorage.getItem("bv.sidebar") !== "0");
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const n = Number(localStorage.getItem("bv.sidebarWidth"));
+    return Number.isFinite(n) && n >= 120 ? n : 168;
+  });
+  const startSidebarResize = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sidebarWidth;
+    const move = (ev: MouseEvent) => {
+      const max = Math.round(window.innerWidth * 0.7);
+      setSidebarWidth(Math.min(Math.max(startW + ev.clientX - startX, 120), max));
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      setSidebarWidth((w) => {
+        localStorage.setItem("bv.sidebarWidth", String(w));
+        return w;
+      });
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
   const toggleSidebar = useCallback(
     () =>
       setShowSidebar((v) => {
@@ -169,16 +192,27 @@ export default function App() {
       ) : (
         <div className="flex min-h-0 flex-1">
           {showSidebar && (
-            <BranchPane
-              key={activeRepo.id}
-              repoId={activeRepo.id}
-              branches={branches}
-              selectedRef={selectedRef}
-              onSelect={setSelectedRef}
-              showRemoteDefault={settings.showRemoteBranches}
-              onToast={show}
-              onChanged={refresh}
-            />
+            <>
+              <div style={{ width: sidebarWidth }} className="flex min-w-0 shrink-0">
+                <BranchPane
+                  key={activeRepo.id}
+                  repoId={activeRepo.id}
+                  branches={branches}
+                  selectedRef={selectedRef}
+                  onSelect={setSelectedRef}
+                  showRemoteDefault={settings.showRemoteBranches}
+                  onToast={show}
+                  onChanged={refresh}
+                />
+              </div>
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize branch panel"
+                onMouseDown={startSidebarResize}
+                className="-ml-[2px] w-[3px] shrink-0 cursor-col-resize hover:bg-blue-500/50 active:bg-blue-500/70"
+              />
+            </>
           )}
           <CommitGraph
             repoId={activeRepo.id}

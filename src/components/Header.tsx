@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { fetchRepo, pullRepo, type RepoInfo, type Settings } from "../lib/ipc";
 import { useDismiss } from "./ContextMenu";
 
@@ -71,6 +71,34 @@ function GearIcon() {
 
 const iconBtn =
   "flex size-6 items-center justify-center rounded text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-40 disabled:hover:bg-transparent dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200";
+
+function IconButton({
+  label,
+  active = false,
+  disabled = false,
+  onClick,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      className={`group relative ${iconBtn} ${active ? "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200" : ""}`}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+      <span className="pointer-events-none absolute top-full right-0 z-50 mt-1 hidden rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] whitespace-nowrap text-white group-hover:block dark:bg-neutral-600">
+        {label}
+      </span>
+    </button>
+  );
+}
 
 export function Header({
   settings,
@@ -182,41 +210,22 @@ export function Header({
 
       <div data-tauri-drag-region="" className="h-full flex-1" />
 
-      <button
-        className={iconBtn}
-        aria-label={sidebarVisible ? "Hide branch panel" : "Show branch panel"}
-        title={sidebarVisible ? "Hide branch panel" : "Show branch panel"}
+      <IconButton
+        label={sidebarVisible ? "Hide branch panel" : "Show branch panel"}
         disabled={!activeRepo}
         onClick={onToggleSidebar}
       >
         <PanelLeftIcon open={sidebarVisible} />
-      </button>
-      <button
-        className={iconBtn}
-        aria-label="Fetch"
-        title="Fetch"
-        disabled={!activeRepo || fetching}
-        onClick={doFetch}
-      >
+      </IconButton>
+      <IconButton label="Fetch" disabled={!activeRepo || fetching} onClick={doFetch}>
         <RefreshIcon spinning={fetching} />
-      </button>
-      <button
-        className={iconBtn}
-        aria-label="Pull"
-        title="Pull"
-        disabled={!activeRepo || pulling}
-        onClick={doPull}
-      >
+      </IconButton>
+      <IconButton label="Pull" disabled={!activeRepo || pulling} onClick={doPull}>
         <PullIcon spinning={pulling} />
-      </button>
-      <button
-        className={`${iconBtn} ${inSettings ? "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200" : ""}`}
-        aria-label="Settings"
-        title="Settings"
-        onClick={onToggleSettings}
-      >
+      </IconButton>
+      <IconButton label="Settings" active={inSettings} onClick={onToggleSettings}>
         <GearIcon />
-      </button>
+      </IconButton>
     </header>
   );
 }
