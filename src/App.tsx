@@ -1,12 +1,177 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  addRepo,
+  getBranches,
+  getSettings,
+  onRepoChanged,
+  pickRepoFolder,
+  setActiveRepo,
+  type BranchInfo,
+  type Settings,
+} from "./lib/ipc";
+import { BranchPane } from "./components/BranchPane";
+import { CommitGraph } from "./components/CommitGraph";
+import { Header } from "./components/Header";
+import { SettingsView } from "./components/SettingsView";
+import { Toast, useToast } from "./components/Toast";
+
 export default function App() {
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [selectedRef, setSelectedRef] = useState<string | null>(null);
+  const [view, setView] = useState<"main" | "settings">("main");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { toast, show } = useToast();
+
+  const activeRepo = settings?.repos.find((r) => r.id === settings.activeRepoId) ?? null;
+  const repoId = activeRepo?.id ?? null;
+  const repoIdRef = useRef<string | null>(null);
+  repoIdRef.current = repoId;
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  useEffect(() => {
+    getSettings()
+      .then(setSettings)
+      .catch((e: unknown) => show(String(e)));
+  }, [show]);
+
+  // Theme: drive the `dark` class on <html> from settings ("system" tracks the OS).
+  const theme = settings?.theme ?? "system";
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () =>
+      document.documentElement.classList.toggle(
+        "dark",
+        theme === "dark" || (theme === "system" && mq.matches),
+      );
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [theme]);
+
+  useEffect(() => {
+    setSelectedRef(null);
+  }, [repoId]);
+
+  useEffect(() => {
+    if (!repoId) {
+      setBranches([]);
+      return;
+    }
+    let live = true;
+    getBranches(repoId)
+      .then((b) => {
+        if (live) setBranches(b);
+      })
+      .catch((e: unknown) => show(String(e)));
+    return () => {
+      live = false;
+    };
+  }, [repoId, refreshKey, show]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let dead = false;
+    void onRepoChanged((changedId) => {
+      if (changedId === repoIdRef.current) refresh();
+    }).then((f) => {
+      if (dead) f();
+      else unlisten = f;
+    });
+    return () => {
+      dead = true;
+      unlisten?.();
+    };
+  }, [refresh]);
+
+  const addRepository = useCallback(async () => {
+    try {
+      const path = await pickRepoFolder();
+      if (!path) return;
+      const repo = await addRepo(path);
+      await setActiveRepo(repo.id);
+      setSettings(await getSettings());
+      setView("main");
+    } catch (e) {
+      show(String(e));
+    }
+  }, [show]);
+
+  const switchRepo = useCallback(
+    async (id: string) => {
+      try {
+        await setActiveRepo(id);
+        setSettings(await getSettings());
+      } catch (e) {
+        show(String(e));
+      }
+    },
+    [show],
+  );
+
+  if (!settings) {
+    return (
+      <main className="flex h-screen w-screen items-center justify-center bg-white select-none dark:bg-neutral-900">
+        <span className="text-[12px] text-neutral-400">Loading…</span>
+      </main>
+    );
+  }
+
   return (
-    <main className="flex h-screen w-screen flex-col select-none bg-neutral-900 text-neutral-100">
-      <div className="flex flex-1 items-center justify-center">
-        <div className="text-center">
-          <div className="text-lg font-semibold tracking-tight">Branch Visualizer</div>
-          <div className="mt-1 text-xs text-neutral-500">git, one click away</div>
+    <main className="flex h-screen w-screen flex-col overflow-hidden bg-white text-[13px] text-neutral-800 select-none dark:bg-neutral-900 dark:text-neutral-200">
+      <Header
+        settings={settings}
+        activeRepo={activeRepo}
+        inSettings={view === "settings"}
+        onSwitchRepo={(id) => void switchRepo(id)}
+        onAddRepo={() => void addRepository()}
+        onToggleSettings={() => setView((v) => (v === "settings" ? "main" : "settings"))}
+        onChanged={refresh}
+        onToast={show}
+      />
+      {view === "settings" ? (
+        <SettingsView onBack={() => setView("main")} />
+      ) : !activeRepo ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3">
+          <div className="text-center">
+            <div className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+              No repository yet
+            </div>
+            <div className="mt-0.5 text-[11px] text-neutral-400 dark:text-neutral-500">
+              Add a local git repository to get started
+            </div>
+          </div>
+          <button
+            className="rounded bg-blue-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-blue-500"
+            onClick={() => void addRepository()}
+          >
+            Add repository
+          </button>
         </div>
-      </div>
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          <BranchPane
+            key={activeRepo.id}
+            repoId={activeRepo.id}
+            branches={branches}
+            selectedRef={selectedRef}
+            onSelect={setSelectedRef}
+            showRemoteDefault={settings.showRemoteBranches}
+            onToast={show}
+            onChanged={refresh}
+          />
+          <CommitGraph
+            repoId={activeRepo.id}
+            refName={selectedRef}
+            pageSize={settings.commitsPerPage > 0 ? settings.commitsPerPage : 200}
+            refreshKey={refreshKey}
+            onToast={show}
+            onChanged={refresh}
+          />
+        </div>
+      )}
+      <Toast message={toast} />
     </main>
   );
 }

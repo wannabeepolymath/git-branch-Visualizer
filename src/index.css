@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-driven dark mode: App toggles `dark` on <html> from settings.theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 html,
 body,
 #root {
@@ -9,4 +12,6 @@ body,
 
 body {
   overflow: hidden;
+  cursor: default;
+  -webkit-font-smoothing: antialiased;
 }
