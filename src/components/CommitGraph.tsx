@@ -85,7 +85,9 @@ function Rail({ row, railW, theme }: { row: GraphRow; railW: number; theme: Them
   );
 }
 
-function RefPill({ r, theme }: { r: string; theme: ThemeName }) {
+// `full` drops the inline width cap so the whole ref name shows — used in the
+// overflow popover where there's no neighboring content to crowd.
+function RefPill({ r, theme, full }: { r: string; theme: ThemeName; full?: boolean }) {
   const isTag = r.startsWith("tag:");
   const label = isTag ? r.slice(4) : r;
   // Terminal drops the pill chrome for bracketed tags — [branch] / <tag>.
@@ -93,9 +95,9 @@ function RefPill({ r, theme }: { r: string; theme: ThemeName }) {
     return (
       <span
         title={label}
-        className={`max-w-[110px] shrink-0 truncate font-mono text-[9.5px] leading-[14px] font-semibold ${
-          isTag ? "text-tag-fg" : "text-pill-fg"
-        }`}
+        className={`font-mono text-[9.5px] leading-[14px] font-semibold ${
+          full ? "whitespace-nowrap" : "max-w-[110px] shrink-0 truncate"
+        } ${isTag ? "text-tag-fg" : "text-pill-fg"}`}
       >
         {isTag ? `<${label}>` : `[${label}]`}
       </span>
@@ -104,9 +106,9 @@ function RefPill({ r, theme }: { r: string; theme: ThemeName }) {
   return (
     <span
       title={label}
-      className={`max-w-[76px] shrink-0 truncate rounded-sm px-1 text-[9px] leading-[14px] font-medium ${
-        isTag ? "bg-tag text-tag-fg" : "bg-pill text-pill-fg"
-      }`}
+      className={`rounded-sm px-1 text-[9px] leading-[14px] font-medium ${
+        full ? "whitespace-nowrap" : "max-w-[76px] shrink-0 truncate"
+      } ${isTag ? "bg-tag text-tag-fg" : "bg-pill text-pill-fg"}`}
     >
       {label}
     </span>
@@ -717,8 +719,13 @@ export function CommitGraph({
           <RefPill key={r} r={r} theme={theme} />
         ))}
         {extraPills > 0 && (
-          <span className="shrink-0 rounded-sm bg-panel2 px-1 text-[9px] leading-[14px] text-faint">
+          <span className="group/refs relative shrink-0 cursor-help rounded-sm bg-panel2 px-1 text-[9px] leading-[14px] text-faint transition-colors hover:text-fg">
             +{extraPills}
+            <span className="pointer-events-none absolute top-full right-0 z-20 mt-1 hidden min-w-max flex-col items-start gap-1 rounded-md border border-edge bg-panel p-1.5 shadow-xl shadow-black/20 group-hover/refs:flex">
+              {c.refs.slice(2).map((r) => (
+                <RefPill key={r} r={r} theme={theme} full />
+              ))}
+            </span>
           </span>
         )}
         <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
