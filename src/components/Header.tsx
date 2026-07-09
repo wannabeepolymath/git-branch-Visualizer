@@ -187,6 +187,10 @@ export function Header({
       data-tauri-drag-region=""
       className="relative flex h-10 shrink-0 items-center gap-1 border-b border-edge px-2"
     >
+      <IconButton label="Reset size & position" tipLeft onClick={onResetWindow}>
+        <RecenterIcon />
+      </IconButton>
+
       {inSettings ? (
         <IconButton label="Back" tipLeft onClick={onToggleSettings}>
           <BackIcon />
@@ -267,10 +271,6 @@ export function Header({
       )}
 
       <div data-tauri-drag-region="" className="h-full flex-1" />
-
-      <IconButton label="Reset size & position" onClick={onResetWindow}>
-        <RecenterIcon />
-      </IconButton>
 
       {!inSettings && (
         <>
