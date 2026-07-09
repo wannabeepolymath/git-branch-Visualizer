@@ -25,15 +25,20 @@ fn is_noise(path: &PathBuf) -> bool {
         .unwrap_or(false)
 }
 
-/// Start (or restart) a watcher for `repo_id` on `<repo_path>/.git`.
-/// Best-effort: returns Err if the .git dir can't be watched (e.g. worktree file).
+/// Start (or restart) a watcher for `repo_id` on the repo's git dir.
+/// In a linked worktree `.git` is a file pointing at the shared git dir — resolve
+/// and watch that instead (it also holds the worktree's HEAD/index, under
+/// `worktrees/<name>/`). Best-effort: returns Err if nothing watchable exists.
 pub fn start(
     app: &AppHandle,
     state: &AppState,
     repo_id: &str,
     repo_path: &str,
 ) -> Result<(), String> {
-    let git_dir = PathBuf::from(repo_path).join(".git");
+    let mut git_dir = PathBuf::from(repo_path).join(".git");
+    if !git_dir.is_dir() {
+        git_dir = PathBuf::from(crate::git::common_dir(repo_path)?);
+    }
     if !git_dir.is_dir() {
         return Err(format!("{} is not a .git directory", git_dir.display()));
     }
