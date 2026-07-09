@@ -258,7 +258,7 @@ export function Header({
         <button
           className="flex min-w-0 shrink items-center gap-1 rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent hover:opacity-80"
           onClick={onClearFocus}
-          title="Focused worktree — click to return to the main worktree"
+          title="Focused worktree — click to return to the default worktree"
         >
           <span className="shrink-0">⧉</span>
           <span className="max-w-[120px] truncate">{focusedWorktreeLabel}</span>

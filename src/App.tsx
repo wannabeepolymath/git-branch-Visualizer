@@ -73,6 +73,7 @@ export default function App() {
 
   const activeRepo = settings?.repos.find((r) => r.id === settings.activeRepoId) ?? null;
   const repoId = activeRepo?.id ?? null;
+  const repoPath = activeRepo?.path ?? null; // the worktree the backend acts on by default
   const repoIdRef = useRef<string | null>(null);
   repoIdRef.current = repoId;
 
@@ -81,13 +82,15 @@ export default function App() {
   // The worktree the app acts on. Pass undefined when it's the main worktree so
   // backend commands use the repo path directly and skip worktree validation.
   const focusedWt = worktrees.find((w) => w.path === focusedWorktree);
-  const worktreeArg = focusedWt && !focusedWt.isMain ? focusedWt.path : undefined;
+  // Actions run in the focused worktree; pass undefined for the registered repo
+  // path so the backend uses it directly and skips worktree validation.
+  const worktreeArg =
+    focusedWorktree && focusedWorktree !== repoPath ? focusedWorktree : undefined;
   const focusedWorktreeLabel = worktreeArg
     ? (focusedWt?.branch ?? focusedWt?.head.slice(0, 7))
     : undefined;
   const clearFocus = () => {
-    const main = worktrees.find((w) => w.isMain);
-    if (main) setFocusedWorktree(main.path);
+    if (repoPath) setFocusedWorktree(repoPath);
   };
 
   // null clears to "all branches". additive (⌘/Ctrl-click) toggles a ref in the set; plain click focuses one.
@@ -142,18 +145,21 @@ export default function App() {
       .then((ws) => {
         if (!live) return;
         setWorktrees(ws);
-        // Default focus to the main worktree; self-heal if the focused one is gone.
+        // Default focus to the registered worktree; self-heal if focus is gone.
         setFocusedWorktree((cur) =>
           ws.some((w) => w.path === cur)
             ? cur
-            : (ws.find((w) => w.isMain)?.path ?? ws[0]?.path ?? ""),
+            : (ws.find((w) => w.path === repoPath)?.path ??
+              ws.find((w) => w.isMain)?.path ??
+              ws[0]?.path ??
+              ""),
         );
       })
       .catch((e: unknown) => show(String(e)));
     return () => {
       live = false;
     };
-  }, [repoId, refreshKey, show]);
+  }, [repoId, repoPath, refreshKey, show]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -253,6 +259,7 @@ export default function App() {
                   branches={branches}
                   worktrees={worktrees}
                   focusedWorktreePath={focusedWorktree}
+                  worktreeArg={worktreeArg}
                   onFocusWorktree={setFocusedWorktree}
                   openTargets={settings.openTargets}
                   defaultOpenTarget={settings.defaultOpenTarget}

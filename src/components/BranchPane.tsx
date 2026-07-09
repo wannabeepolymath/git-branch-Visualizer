@@ -59,6 +59,7 @@ export function BranchPane({
   branches,
   worktrees,
   focusedWorktreePath,
+  worktreeArg,
   onFocusWorktree,
   openTargets,
   defaultOpenTarget,
@@ -72,6 +73,8 @@ export function BranchPane({
   branches: BranchInfo[];
   worktrees: WorktreeInfo[];
   focusedWorktreePath: string;
+  /** Focused worktree path to route checkout to; undefined = registered repo path. */
+  worktreeArg: string | undefined;
   onFocusWorktree: (path: string) => void;
   openTargets: OpenTarget[];
   defaultOpenTarget: string | null;
@@ -107,7 +110,6 @@ export function BranchPane({
     worktrees.map((w) => w.branch).filter((b): b is string => !!b),
   );
   const focusedWt = worktrees.find((w) => w.path === focusedWorktreePath);
-  const worktreeArg = focusedWt && !focusedWt.isMain ? focusedWt.path : undefined;
   const currentName = focusedWt?.branch ?? branches.find((b) => b.isCurrent)?.name ?? null;
   const current = branches.filter((b) => !b.isRemote && b.name === currentName && match(b));
   const local = branches.filter((b) => !b.isRemote && b.name !== currentName && match(b));
