@@ -463,6 +463,24 @@ pub fn pull(repo: &str) -> Result<(), String> {
     git(repo, &["pull", "--ff-only"]).map(|_| ())
 }
 
+/// Push local `branch` to origin. `set_upstream` publishes it with `-u` (first
+/// push, no tracking yet); `force` uses `--force-with-lease` (safe force — refuses
+/// to clobber if the remote moved unexpectedly). Always explicit `origin <branch>`
+/// so the intended branch is pushed even when it isn't the current checkout.
+/// ponytail: assumes local name == remote branch name (the default); a branch
+/// tracking a differently-named upstream would need a `local:remote` refspec.
+pub fn push(repo: &str, branch: &str, set_upstream: bool, force: bool) -> Result<(), String> {
+    let mut args = vec!["push"];
+    if set_upstream {
+        args.push("--set-upstream");
+    } else if force {
+        args.push("--force-with-lease");
+    }
+    args.push("origin");
+    args.push(branch);
+    git(repo, &args).map(|_| ())
+}
+
 /// Absolute path to the repository's common git dir — the same for a repo and all
 /// its linked worktrees. Used to check a candidate worktree belongs to a given repo.
 pub fn common_dir(path: &str) -> Result<String, String> {

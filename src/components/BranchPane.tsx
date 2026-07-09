@@ -3,6 +3,7 @@ import {
   checkout,
   createBranch,
   deleteBranch,
+  pushBranch,
   renameBranch,
   type BranchInfo,
   type OpenTarget,
@@ -12,7 +13,7 @@ import { relTime } from "../lib/relTime";
 import { ContextMenu, PromptPopover, type MenuItem } from "./ContextMenu";
 import { WorktreePane } from "./WorktreePane";
 
-type PromptKind = "new" | "rename" | "delete";
+type PromptKind = "new" | "rename" | "delete" | "force-push";
 
 function Group({
   label,
@@ -146,6 +147,23 @@ export function BranchPane({
       },
     ];
     if (!b.isRemote) {
+      // Push: no upstream → publish with -u; otherwise a plain push (count hint)
+      // plus a lease-guarded force push behind a confirm.
+      if (b.upstream) {
+        items.push({
+          label: b.ahead > 0 ? `Push (${b.ahead})` : "Push",
+          onClick: () => run(pushBranch(repoId, b.name, false, false), `Pushed ${b.name}`),
+        });
+        items.push({
+          label: "Force push…",
+          onClick: () => setPrompt({ x: m.x, y: m.y, kind: "force-push", branch: b }),
+        });
+      } else {
+        items.push({
+          label: "Publish branch",
+          onClick: () => run(pushBranch(repoId, b.name, true, false), `Published ${b.name}`),
+        });
+      }
       items.push(
         {
           label: "Rename…",
@@ -335,6 +353,21 @@ export function BranchPane({
                 onConfirm={async (v) => {
                   await renameBranch(repoId, b.name, v);
                   onToast(`Renamed to ${v}`);
+                  onChanged();
+                }}
+              />
+            );
+          }
+          if (prompt.kind === "force-push") {
+            return (
+              <PromptPopover
+                {...common}
+                title={`Force-push "${b.name}"?`}
+                confirmLabel="Force push"
+                danger
+                onConfirm={async () => {
+                  await pushBranch(repoId, b.name, false, true);
+                  onToast(`Force-pushed ${b.name}`);
                   onChanged();
                 }}
               />

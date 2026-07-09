@@ -73,6 +73,7 @@ pub fn run() {
             commands::delete_branch,
             commands::fetch_repo,
             commands::pull_repo,
+            commands::push_branch,
         ])
         .on_window_event(|window, event| {
             // Dismiss the popover when it loses focus (blur) — unless the blur

@@ -170,6 +170,14 @@ export const fetchRepo = (repoId: string): Promise<void> => invoke("fetch_repo",
 
 export const pullRepo = (repoId: string): Promise<void> => invoke("pull_repo", { repoId });
 
+/** Push `branch` to origin. `setUpstream` publishes it (`-u`); `force` uses `--force-with-lease`. */
+export const pushBranch = (
+  repoId: string,
+  branch: string,
+  setUpstream: boolean,
+  force: boolean,
+): Promise<void> => invoke("push_branch", { repoId, branch, setUpstream, force });
+
 /** Subscribe to backend repo-change notifications. Resolves to an unlisten fn. */
 export function onRepoChanged(cb: (repoId: string) => void): Promise<UnlistenFn> {
   return listen<{ repoId: string }>("repo-changed", (e) => cb(e.payload.repoId));

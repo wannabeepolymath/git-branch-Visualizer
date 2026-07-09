@@ -371,3 +371,15 @@ pub async fn pull_repo(state: State<'_, AppState>, repo_id: String) -> Result<()
     let path = state.repo_path(&repo_id)?;
     git::pull(&path)
 }
+
+#[tauri::command]
+pub async fn push_branch(
+    state: State<'_, AppState>,
+    repo_id: String,
+    branch: String,
+    set_upstream: bool,
+    force: bool,
+) -> Result<(), String> {
+    let path = state.repo_path(&repo_id)?;
+    git::push(&path, &branch, set_upstream, force)
+}
