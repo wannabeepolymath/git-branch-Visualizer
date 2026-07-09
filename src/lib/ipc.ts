@@ -131,6 +131,10 @@ export const getLog = (
 export const getCommit = (repoId: string, hash: string): Promise<CommitDetail> =>
   invoke("get_commit", { repoId, hash });
 
+/** Unified diff for one path as changed by a commit (vs its first parent). */
+export const diffCommitFile = (repoId: string, hash: string, path: string): Promise<string> =>
+  invoke("diff_commit_file", { repoId, hash, path });
+
 // `worktreePath` routes the action to a linked worktree's working dir. Omit (or
 // pass undefined) to act on the repo's main worktree.
 export const getStatus = (repoId: string, worktreePath?: string): Promise<WorkingStatus> =>

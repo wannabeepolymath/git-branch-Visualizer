@@ -11,6 +11,7 @@ import {
 import {
   checkout,
   createBranch,
+  diffCommitFile,
   diffFile,
   discardFiles,
   getCommit,
@@ -230,13 +231,42 @@ function DiffView({ text }: { text: string | null }) {
 
 function DetailPanel({
   top,
+  repoId,
   detail,
   onToast,
 }: {
   top: number;
+  repoId: string;
   detail: CommitDetail | null;
   onToast: (msg: string) => void;
 }) {
+  const [openDiff, setOpenDiff] = useState<string | null>(null);
+  const [diffText, setDiffText] = useState<string | null>(null);
+
+  // Collapse any open diff when the panel switches to another commit.
+  const hash = detail?.hash;
+  useEffect(() => {
+    setOpenDiff(null);
+    setDiffText(null);
+  }, [hash]);
+
+  const toggleDiff = (path: string) => {
+    if (!hash) return;
+    if (openDiff === path) {
+      setOpenDiff(null);
+      setDiffText(null);
+      return;
+    }
+    setOpenDiff(path);
+    setDiffText(null); // DiffView renders its loading state on null
+    diffCommitFile(repoId, hash, path)
+      .then(setDiffText)
+      .catch((e: unknown) => {
+        onToast(String(e));
+        setOpenDiff(null);
+      });
+  };
+
   return (
     <div
       className="absolute inset-x-0 z-10 overflow-y-auto border-y border-edge bg-panel2 px-3 py-2"
@@ -276,7 +306,12 @@ function DetailPanel({
             {detail.files.length === 0 ? (
               <div className="text-[11px] text-faint">No files changed</div>
             ) : (
-              detail.files.map((f) => <FileRow key={f.path} f={f} />)
+              detail.files.map((f) => (
+                <div key={f.path}>
+                  <FileRow f={f} onToggleDiff={() => toggleDiff(f.path)} />
+                  {openDiff === f.path && <DiffView text={diffText} />}
+                </div>
+              ))
             )}
           </div>
         </>
@@ -759,7 +794,12 @@ export function CommitGraph({
           <div className="relative" style={{ height: totalH }}>
             {visible}
             {expIdx >= 0 && (
-              <DetailPanel top={rowTop(expIdx) + ROW_H} detail={detail} onToast={onToast} />
+              <DetailPanel
+                top={rowTop(expIdx) + ROW_H}
+                repoId={repoId}
+                detail={detail}
+                onToast={onToast}
+              />
             )}
             {!done && (
               <div
