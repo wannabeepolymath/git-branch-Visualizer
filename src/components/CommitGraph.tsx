@@ -178,14 +178,14 @@ function DetailPanel({
 
 export function CommitGraph({
   repoId,
-  refName,
+  refs,
   pageSize,
   refreshKey,
   onToast,
   onChanged,
 }: {
   repoId: string;
-  refName: string | null;
+  refs: string[];
   pageSize: number;
   refreshKey: number;
   onToast: (msg: string) => void;
@@ -208,6 +208,9 @@ export function CommitGraph({
   const lenRef = useRef(0);
   lenRef.current = commits.length;
 
+  // Array identity changes each render; a joined key drives the reload effect. \n can't appear in a ref name.
+  const refsKey = refs.join("\n");
+
   // Initial load / branch or repo switch: reset everything.
   useEffect(() => {
     let live = true;
@@ -218,7 +221,7 @@ export function CommitGraph({
     setDetail(null);
     setScrollTop(0);
     containerRef.current?.scrollTo(0, 0);
-    getLog(repoId, refName, 0, pageSize)
+    getLog(repoId, refs, 0, pageSize)
       .then((cs) => {
         if (!live) return;
         setCommits(cs);
@@ -231,14 +234,14 @@ export function CommitGraph({
     return () => {
       live = false;
     };
-  }, [repoId, refName, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [repoId, refsKey, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // External refresh (repo-changed, branch ops): reload the loaded window in place.
   useEffect(() => {
     if (refreshKey === 0) return;
     const limit = Math.max(lenRef.current, pageSize);
     let live = true;
-    getLog(repoId, refName, 0, limit)
+    getLog(repoId, refs, 0, limit)
       .then((cs) => {
         if (!live) return;
         setCommits(cs);
@@ -265,7 +268,7 @@ export function CommitGraph({
   const loadMore = () => {
     if (loadingMoreRef.current || done || loading) return;
     loadingMoreRef.current = true;
-    getLog(repoId, refName, lenRef.current, pageSize)
+    getLog(repoId, refs, lenRef.current, pageSize)
       .then((next) => {
         if (next.length < pageSize) setDone(true);
         setCommits((cur) => [...cur, ...next]);

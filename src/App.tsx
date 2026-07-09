@@ -18,7 +18,7 @@ import { Toast, useToast } from "./components/Toast";
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
-  const [selectedRef, setSelectedRef] = useState<string | null>(null);
+  const [selectedRefs, setSelectedRefs] = useState<string[]>([]);
   const [view, setView] = useState<"main" | "settings">("main");
   const [refreshKey, setRefreshKey] = useState(0);
   const [showSidebar, setShowSidebar] = useState(() => localStorage.getItem("bv.sidebar") !== "0");
@@ -62,6 +62,15 @@ export default function App() {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
+  // null clears to "all branches". additive (⌘/Ctrl-click) toggles a ref in the set; plain click focuses one.
+  const selectRef = useCallback((ref: string | null, additive: boolean) => {
+    if (ref === null) return setSelectedRefs([]);
+    setSelectedRefs((cur) => {
+      if (!additive) return [ref];
+      return cur.includes(ref) ? cur.filter((r) => r !== ref) : [...cur, ref];
+    });
+  }, []);
+
   useEffect(() => {
     getSettings()
       .then(setSettings)
@@ -83,7 +92,7 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    setSelectedRef(null);
+    setSelectedRefs([]);
   }, [repoId]);
 
   useEffect(() => {
@@ -198,8 +207,8 @@ export default function App() {
                   key={activeRepo.id}
                   repoId={activeRepo.id}
                   branches={branches}
-                  selectedRef={selectedRef}
-                  onSelect={setSelectedRef}
+                  selectedRefs={selectedRefs}
+                  onSelect={selectRef}
                   showRemoteDefault={settings.showRemoteBranches}
                   onToast={show}
                   onChanged={refresh}
@@ -216,7 +225,7 @@ export default function App() {
           )}
           <CommitGraph
             repoId={activeRepo.id}
-            refName={selectedRef}
+            refs={selectedRefs}
             pageSize={settings.commitsPerPage > 0 ? settings.commitsPerPage : 200}
             refreshKey={refreshKey}
             onToast={show}

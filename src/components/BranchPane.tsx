@@ -54,7 +54,7 @@ function Group({
 export function BranchPane({
   repoId,
   branches,
-  selectedRef,
+  selectedRefs,
   onSelect,
   showRemoteDefault,
   onToast,
@@ -62,8 +62,8 @@ export function BranchPane({
 }: {
   repoId: string;
   branches: BranchInfo[];
-  selectedRef: string | null;
-  onSelect: (ref: string | null) => void;
+  selectedRefs: string[];
+  onSelect: (ref: string | null, additive: boolean) => void;
   showRemoteDefault: boolean;
   onToast: (msg: string) => void;
   onChanged: () => void;
@@ -131,7 +131,7 @@ export function BranchPane({
   };
 
   const row = (b: BranchInfo) => {
-    const selected = selectedRef === b.name;
+    const selected = selectedRefs.includes(b.name);
     return (
       <div
         key={b.name}
@@ -142,7 +142,7 @@ export function BranchPane({
             : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
         }`}
         title={b.lastCommitSubject}
-        onClick={() => onSelect(b.name)}
+        onClick={(e) => onSelect(b.name, e.metaKey || e.ctrlKey)}
         onContextMenu={(e) => openMenu(e, b)}
       >
         {b.isCurrent && <span className="size-1.5 shrink-0 rounded-full bg-green-500" />}
@@ -175,11 +175,11 @@ export function BranchPane({
         <div
           role="button"
           className={`flex h-7 cursor-default items-center px-2 text-[12px] ${
-            selectedRef === null
+            selectedRefs.length === 0
               ? "bg-blue-500/10 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300"
               : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
           }`}
-          onClick={() => onSelect(null)}
+          onClick={() => onSelect(null, false)}
         >
           All branches
         </div>

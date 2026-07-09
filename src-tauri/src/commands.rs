@@ -170,12 +170,12 @@ pub async fn get_branches(
 pub async fn get_log(
     state: State<'_, AppState>,
     repo_id: String,
-    ref_name: Option<String>,
+    refs: Vec<String>,
     skip: u32,
     limit: u32,
 ) -> Result<Vec<git::CommitInfo>, String> {
     let path = state.repo_path(&repo_id)?;
-    git::get_log(&path, ref_name.as_deref(), skip, limit)
+    git::get_log(&path, &refs, skip, limit)
 }
 
 #[tauri::command]

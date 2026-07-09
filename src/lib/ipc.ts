@@ -69,10 +69,10 @@ export const getBranches = (repoId: string): Promise<BranchInfo[]> =>
 
 export const getLog = (
   repoId: string,
-  refName: string | null,
+  refs: string[], // empty = all branches/remotes/tags
   skip: number,
   limit: number,
-): Promise<CommitInfo[]> => invoke("get_log", { repoId, refName, skip, limit });
+): Promise<CommitInfo[]> => invoke("get_log", { repoId, refs, skip, limit });
 
 export const getCommit = (repoId: string, hash: string): Promise<CommitDetail> =>
   invoke("get_commit", { repoId, hash });

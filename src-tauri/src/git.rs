@@ -188,9 +188,10 @@ pub fn get_branches(repo: &str, include_remotes: bool) -> Result<Vec<BranchInfo>
     Ok(out)
 }
 
+/// Log the union of the given refs. Empty `refs` means all branches/remotes/tags.
 pub fn get_log(
     repo: &str,
-    ref_name: Option<&str>,
+    refs: &[String],
     skip: u32,
     limit: u32,
 ) -> Result<Vec<CommitInfo>, String> {
@@ -198,9 +199,10 @@ pub fn get_log(
     let max_arg = format!("--max-count={limit}");
     let fmt_arg = format!("--format={LOG_FORMAT}");
     let mut args = vec!["log", &skip_arg, &max_arg, "--date-order", &fmt_arg];
-    match ref_name {
-        Some(r) => args.push(r),
-        None => args.extend_from_slice(&["--branches", "--remotes", "--tags"]),
+    if refs.is_empty() {
+        args.extend_from_slice(&["--branches", "--remotes", "--tags"]);
+    } else {
+        args.extend(refs.iter().map(String::as_str));
     }
     let out = git(repo, &args)?;
     Ok(out.lines().filter_map(parse_log_line).collect())
