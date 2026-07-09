@@ -48,6 +48,7 @@ pub fn run() {
             commands::get_branches,
             commands::get_log,
             commands::get_commit,
+            commands::get_status,
             commands::checkout,
             commands::create_branch,
             commands::rename_branch,

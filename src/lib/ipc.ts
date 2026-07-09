@@ -40,6 +40,11 @@ export type CommitDetail = CommitInfo & {
   files: FileChange[];
 };
 
+export interface WorkingStatus {
+  staged: FileChange[];
+  unstaged: FileChange[]; // untracked files appear here with status "?"
+}
+
 export interface Settings {
   repos: RepoInfo[];
   activeRepoId: string | null;
@@ -76,6 +81,9 @@ export const getLog = (
 
 export const getCommit = (repoId: string, hash: string): Promise<CommitDetail> =>
   invoke("get_commit", { repoId, hash });
+
+export const getStatus = (repoId: string): Promise<WorkingStatus> =>
+  invoke("get_status", { repoId });
 
 export const checkout = (repoId: string, refName: string): Promise<void> =>
   invoke("checkout", { repoId, refName });

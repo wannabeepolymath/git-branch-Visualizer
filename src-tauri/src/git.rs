@@ -45,6 +45,14 @@ pub struct CommitDetail {
     pub files: Vec<FileChange>,
 }
 
+/// Working-tree status split into index (staged) and worktree (unstaged) changes.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkingStatus {
+    pub staged: Vec<FileChange>,
+    pub unstaged: Vec<FileChange>,
+}
+
 /// Run git in `repo` with locks disabled and terminal prompts suppressed.
 /// Returns stdout on success, trimmed stderr as the error otherwise.
 fn git(repo: &str, args: &[&str]) -> Result<String, String> {
@@ -164,6 +172,37 @@ pub fn parse_log_line(line: &str) -> Option<CommitInfo> {
     })
 }
 
+/// Parse `git status --porcelain=v1 -z` output into staged/unstaged file lists.
+/// Each entry is `XY<space>PATH`; X is the index status, Y the worktree status.
+/// Rename/copy entries carry the original path in a following NUL field (consumed).
+pub fn parse_status_porcelain(out: &str) -> WorkingStatus {
+    let mut staged = Vec::new();
+    let mut unstaged = Vec::new();
+    let mut entries = out.split('\u{0}');
+    while let Some(entry) = entries.next() {
+        if entry.len() < 4 {
+            continue; // trailing empty field after final NUL, or malformed line
+        }
+        let b = entry.as_bytes();
+        let (x, y) = (b[0] as char, b[1] as char);
+        let path = entry[3..].to_string(); // skip "XY "
+        if x == 'R' || x == 'C' || y == 'R' || y == 'C' {
+            entries.next(); // original path of a rename/copy — not a separate entry
+        }
+        if x == '?' {
+            unstaged.push(FileChange { status: "?".to_string(), path }); // untracked
+            continue;
+        }
+        if x != ' ' {
+            staged.push(FileChange { status: x.to_string(), path: path.clone() });
+        }
+        if y != ' ' {
+            unstaged.push(FileChange { status: y.to_string(), path });
+        }
+    }
+    WorkingStatus { staged, unstaged }
+}
+
 // ---- git invocations ----
 
 pub fn get_branches(repo: &str, include_remotes: bool) -> Result<Vec<BranchInfo>, String> {
@@ -244,6 +283,11 @@ pub fn get_commit(repo: &str, hash: &str) -> Result<CommitDetail, String> {
         .collect();
 
     Ok(CommitDetail { commit, body, files })
+}
+
+pub fn get_status(repo: &str) -> Result<WorkingStatus, String> {
+    let out = git(repo, &["status", "--porcelain=v1", "-z", "--untracked-files=all"])?;
+    Ok(parse_status_porcelain(&out))
 }
 
 // ---- write / network ops ----
@@ -346,6 +390,27 @@ mod tests {
         assert_eq!(c.author_email, "ada@x.io");
         assert_eq!(c.timestamp, 1700000001);
         assert_eq!(c.refs, vec!["main", "origin/main", "tag:v1.0"]);
+    }
+
+    #[test]
+    fn status_porcelain_splits_staged_and_unstaged() {
+        // staged+unstaged modify, staged add, untracked, staged rename, unstaged delete
+        let out = "MM src/a.rs\u{0}A  src/new.rs\u{0}?? junk.txt\u{0}R  dst.rs\u{0}src.rs\u{0} D gone.rs\u{0}";
+        let s = parse_status_porcelain(out);
+        assert_eq!(s.staged.len(), 3);
+        assert_eq!((s.staged[0].status.as_str(), s.staged[0].path.as_str()), ("M", "src/a.rs"));
+        assert_eq!((s.staged[1].status.as_str(), s.staged[1].path.as_str()), ("A", "src/new.rs"));
+        assert_eq!((s.staged[2].status.as_str(), s.staged[2].path.as_str()), ("R", "dst.rs"));
+        assert_eq!(s.unstaged.len(), 3);
+        assert_eq!((s.unstaged[0].status.as_str(), s.unstaged[0].path.as_str()), ("M", "src/a.rs"));
+        assert_eq!((s.unstaged[1].status.as_str(), s.unstaged[1].path.as_str()), ("?", "junk.txt"));
+        assert_eq!((s.unstaged[2].status.as_str(), s.unstaged[2].path.as_str()), ("D", "gone.rs"));
+    }
+
+    #[test]
+    fn status_porcelain_empty_is_clean() {
+        let s = parse_status_porcelain("");
+        assert!(s.staged.is_empty() && s.unstaged.is_empty());
     }
 
     #[test]

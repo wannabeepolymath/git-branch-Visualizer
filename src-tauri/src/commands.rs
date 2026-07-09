@@ -189,6 +189,15 @@ pub async fn get_commit(
 }
 
 #[tauri::command]
+pub async fn get_status(
+    state: State<'_, AppState>,
+    repo_id: String,
+) -> Result<git::WorkingStatus, String> {
+    let path = state.repo_path(&repo_id)?;
+    git::get_status(&path)
+}
+
+#[tauri::command]
 pub async fn checkout(
     state: State<'_, AppState>,
     repo_id: String,

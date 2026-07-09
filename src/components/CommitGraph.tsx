@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -12,8 +13,11 @@ import {
   createBranch,
   getCommit,
   getLog,
+  getStatus,
   type CommitDetail,
   type CommitInfo,
+  type FileChange,
+  type WorkingStatus,
 } from "../lib/ipc";
 import { laneColor, layoutGraph, type GraphRow } from "../lib/graph";
 import { relTime } from "../lib/relTime";
@@ -100,9 +104,24 @@ function statusColor(status: string): string {
     case "R":
     case "C":
       return "text-purple-600 dark:text-purple-400";
+    case "?":
+      return "text-green-600 dark:text-green-500"; // untracked (new file)
     default:
       return "text-neutral-500";
   }
+}
+
+function FileRow({ f }: { f: FileChange }) {
+  return (
+    <div className="flex items-center gap-1.5 py-px text-[11px]">
+      <span className={`w-3 shrink-0 text-center font-mono font-semibold ${statusColor(f.status)}`}>
+        {f.status.charAt(0)}
+      </span>
+      <span className="min-w-0 truncate text-neutral-600 dark:text-neutral-300" title={f.path}>
+        {f.path}
+      </span>
+    </div>
+  );
 }
 
 function DetailPanel({
@@ -153,24 +172,92 @@ function DetailPanel({
             {detail.files.length === 0 ? (
               <div className="text-[11px] text-neutral-400">No files changed</div>
             ) : (
-              detail.files.map((f) => (
-                <div key={f.path} className="flex items-center gap-1.5 py-px text-[11px]">
-                  <span
-                    className={`w-3 shrink-0 text-center font-mono font-semibold ${statusColor(f.status)}`}
-                  >
-                    {f.status.charAt(0)}
-                  </span>
-                  <span
-                    className="min-w-0 truncate text-neutral-600 dark:text-neutral-300"
-                    title={f.path}
-                  >
-                    {f.path}
-                  </span>
-                </div>
-              ))
+              detail.files.map((f) => <FileRow key={f.path} f={f} />)
             )}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Pinned, expandable summary of the working tree: staged (index) and unstaged
+ * (worktree + untracked) changes. Hidden entirely when the tree is clean.
+ * Refetches on repo change, external refresh, and each time it's opened —
+ * the .git watcher misses raw file edits, so opening acts as a manual refresh.
+ */
+function WorkingChanges({
+  repoId,
+  refreshKey,
+  onToast,
+}: {
+  repoId: string;
+  refreshKey: number;
+  onToast: (msg: string) => void;
+}) {
+  const [status, setStatus] = useState<WorkingStatus | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const load = useCallback(() => {
+    getStatus(repoId)
+      .then(setStatus)
+      .catch((e: unknown) => onToast(String(e)));
+  }, [repoId, onToast]);
+
+  useEffect(() => {
+    load();
+  }, [load, refreshKey]);
+
+  const staged = status?.staged ?? [];
+  const unstaged = status?.unstaged ?? [];
+  if (staged.length + unstaged.length === 0) return null;
+
+  return (
+    <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700/70">
+      <button
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800/70"
+        onClick={() => setOpen((v) => (v ? false : (load(), true)))}
+      >
+        <span className="w-2 shrink-0 text-[9px] text-neutral-400">{open ? "▾" : "▸"}</span>
+        <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+        <span className="text-[12px] font-medium">Uncommitted changes</span>
+        <span className="text-[11px] text-neutral-400">
+          {[
+            staged.length > 0 ? `${staged.length} staged` : null,
+            unstaged.length > 0 ? `${unstaged.length} unstaged` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </span>
+      </button>
+      {open && (
+        <div className="max-h-[240px] overflow-y-auto border-t border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-700/70 dark:bg-neutral-800/60">
+          {staged.length > 0 && (
+            <>
+              <div className="mb-0.5 text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+                Staged
+              </div>
+              {staged.map((f) => (
+                <FileRow key={`s:${f.path}`} f={f} />
+              ))}
+            </>
+          )}
+          {unstaged.length > 0 && (
+            <>
+              <div
+                className={`mb-0.5 text-[10px] font-semibold tracking-wide text-neutral-400 uppercase ${
+                  staged.length > 0 ? "mt-2" : ""
+                }`}
+              >
+                Unstaged
+              </div>
+              {unstaged.map((f) => (
+                <FileRow key={`u:${f.path}`} f={f} />
+              ))}
+            </>
+          )}
+        </div>
       )}
     </div>
   );
@@ -383,7 +470,9 @@ export function CommitGraph({
   }
 
   return (
-    <div className="relative min-w-0 flex-1">
+    <div className="flex min-w-0 flex-1 flex-col">
+      <WorkingChanges repoId={repoId} refreshKey={refreshKey} onToast={onToast} />
+      <div className="relative min-h-0 flex-1">
       {/* Container stays mounted across empty/loading states so the ResizeObserver keeps tracking. */}
       <div ref={containerRef} className="h-full overflow-y-auto" onScroll={onScroll}>
         {commits.length === 0 ? (
@@ -427,6 +516,7 @@ export function CommitGraph({
           onClose={() => setPrompt(null)}
         />
       )}
+      </div>
     </div>
   );
 }
