@@ -42,8 +42,28 @@ function formatShortcut(e: KeyboardEvent): string | null {
   return [...mods, key].join("+");
 }
 
-const SECTION_IDS = ["repos", "general", "worktrees", "appearance", "graph"] as const;
+const SECTION_IDS = ["repos", "general", "worktrees", "appearance", "graph", "commands"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
+
+// Read-only reference of the git command each button runs. Mirrors the ops in
+// src-tauri/src/git.rs — keep in sync when a command's flags change there.
+// Every command also runs with `git -C <repo> --no-optional-locks` (omitted for clarity).
+const COMMAND_REF: { action: string; cmd: string }[] = [
+  { action: "Stage", cmd: "git add -- <paths>" },
+  { action: "Unstage", cmd: "git restore --staged -- <paths>" },
+  { action: "Discard changes", cmd: "git restore -- <paths>" },
+  { action: "Discard untracked", cmd: "git clean -f -- <paths>" },
+  { action: "Switch / checkout", cmd: "git checkout <ref>" },
+  { action: "New branch", cmd: "git branch <name> [<from>]" },
+  { action: "Rename branch", cmd: "git branch -m <old> <new>" },
+  { action: "Delete branch", cmd: "git branch -d <name>" },
+  { action: "Fetch", cmd: "git fetch --all --prune" },
+  { action: "Pull", cmd: "git pull --ff-only" },
+  { action: "Publish branch", cmd: "git push --set-upstream origin <branch>" },
+  { action: "Push", cmd: "git push origin <branch>" },
+  { action: "Force push", cmd: "git push --force-with-lease origin <branch>" },
+  { action: "Open worktree (↗)", cmd: "your selected Worktrees command" },
+];
 
 const OPEN_STORAGE_KEY = "bv.settingsOpen";
 
@@ -410,6 +430,28 @@ export function SettingsView({
             />
             Show remote branches by default
           </label>
+        </Section>
+
+        <Section
+          title="Commands"
+          badge={COMMAND_REF.length}
+          open={openSections.has("commands")}
+          onToggle={() => toggleSection("commands")}
+        >
+          <p className="mb-1.5 px-3 text-[10px] text-faint">
+            The git command each button runs, for reference. Read-only; runs in the active repo or
+            focused worktree.
+          </p>
+          <div className="flex flex-col gap-1.5 px-3">
+            {COMMAND_REF.map((c) => (
+              <div key={c.action} className="flex flex-col gap-0.5">
+                <span className="text-[11px] text-muted">{c.action}</span>
+                <code className="block rounded border border-edge bg-surface px-1.5 py-0.5 font-mono text-[11px] break-all text-fg select-text">
+                  {c.cmd}
+                </code>
+              </div>
+            ))}
+          </div>
         </Section>
       </div>
 
