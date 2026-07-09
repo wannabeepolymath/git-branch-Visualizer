@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   getSettings,
   normalizeTheme,
@@ -42,10 +42,64 @@ function formatShortcut(e: KeyboardEvent): string | null {
   return [...mods, key].join("+");
 }
 
-function SectionLabel({ children }: { children: string }) {
+const SECTION_IDS = ["repos", "general", "worktrees", "appearance", "graph"] as const;
+type SectionId = (typeof SECTION_IDS)[number];
+
+const OPEN_STORAGE_KEY = "bv.settingsOpen";
+
+/** Read the persisted open-set. First run (nothing stored) → only Repositories. */
+function loadOpenSections(): Set<SectionId> {
+  const raw = localStorage.getItem(OPEN_STORAGE_KEY);
+  if (raw === null) return new Set<SectionId>(["repos"]);
+  return new Set(
+    raw.split(",").filter((id): id is SectionId => (SECTION_IDS as readonly string[]).includes(id)),
+  );
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
   return (
-    <div className="px-3 pt-3 pb-1 text-[10px] font-semibold tracking-wider text-faint uppercase">
-      {children}
+    <svg
+      width="9"
+      height="9"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 text-faint transition-transform ${open ? "rotate-90" : ""}`}
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
+
+function Section({
+  title,
+  badge,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  badge?: number;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left hover:bg-hover"
+      >
+        <ChevronIcon open={open} />
+        <span className="text-[10px] font-semibold tracking-wider text-faint uppercase">{title}</span>
+        {badge !== undefined && <span className="text-[10px] text-faint">({badge})</span>}
+      </button>
+      {open && <div className="pb-2">{children}</div>}
     </div>
   );
 }
@@ -73,6 +127,15 @@ export function SettingsView({
     null,
   );
   const [recording, setRecording] = useState(false);
+  const [openSections, setOpenSections] = useState<Set<SectionId>>(loadOpenSections);
+  const toggleSection = (id: SectionId) =>
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      localStorage.setItem(OPEN_STORAGE_KEY, [...next].join(","));
+      return next;
+    });
   const [cppText, setCppText] = useState(String(settings.commitsPerPage));
   useEffect(() => setCppText(String(settings.commitsPerPage)), [settings.commitsPerPage]);
   // Local copy for smooth typing; persisted on blur (like commits-per-page).
@@ -137,194 +200,217 @@ export function SettingsView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-3">
-        <SectionLabel>Repositories</SectionLabel>
-        <div>
-          {settings.repos.length === 0 && (
-            <div className="px-3 py-1 text-[11px] text-faint">No repositories yet</div>
-          )}
-          {settings.repos.map((r) => (
-            <div key={r.id} className="flex h-8 items-center gap-2 px-3">
-              <div className="min-w-0 flex-1">
-                <div
-                  className={`truncate text-[12px] ${
-                    r.id === settings.activeRepoId
-                      ? "font-semibold text-accent"
-                      : "text-fg"
-                  }`}
-                >
-                  {r.name}
+        <Section
+          title="Repositories"
+          badge={settings.repos.length}
+          open={openSections.has("repos")}
+          onToggle={() => toggleSection("repos")}
+        >
+          <div>
+            {settings.repos.length === 0 && (
+              <div className="px-3 py-1 text-[11px] text-faint">No repositories yet</div>
+            )}
+            {settings.repos.map((r) => (
+              <div key={r.id} className="flex h-8 items-center gap-2 px-3">
+                <div className="min-w-0 flex-1">
+                  <div
+                    className={`truncate text-[12px] ${
+                      r.id === settings.activeRepoId ? "font-semibold text-accent" : "text-fg"
+                    }`}
+                  >
+                    {r.name}
+                  </div>
+                  <div className="truncate text-[10px] text-faint">{r.path}</div>
                 </div>
-                <div className="truncate text-[10px] text-faint">{r.path}</div>
-              </div>
-              <button
-                aria-label={`Remove ${r.name}`}
-                className="flex size-5 shrink-0 items-center justify-center rounded text-faint hover:bg-hover hover:text-del"
-                onClick={(e) => setRemoveTarget({ x: e.clientX, y: e.clientY, repo: r })}
-              >
-                <XIcon />
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="px-3 pt-2">
-          <button
-            className="rounded border border-edge px-2 py-1 text-[11px] text-muted hover:bg-hover"
-            onClick={onAddRepo}
-          >
-            Add repository…
-          </button>
-        </div>
-
-        <SectionLabel>Shortcut</SectionLabel>
-        <div className="px-3">
-          <label className="mb-1 block text-[11px] text-muted" htmlFor="shortcut-recorder">
-            Global shortcut
-          </label>
-          <button
-            id="shortcut-recorder"
-            type="button"
-            aria-label="Global shortcut recorder. Focus and press a key combination to set it."
-            onFocus={() => setRecording(true)}
-            onBlur={() => setRecording(false)}
-            onKeyDown={onShortcutKeyDown}
-            className={`w-full rounded border px-2 py-1 text-left text-[12px] outline-none ${
-              recording ? "border-accent text-accent" : "border-edge text-fg"
-            } bg-surface`}
-          >
-            {recording ? "Press a key combination… (Esc to cancel)" : settings.shortcut}
-          </button>
-        </div>
-
-        <SectionLabel>General</SectionLabel>
-        <label className="flex h-8 items-center gap-2 px-3 text-[12px]">
-          <input
-            type="checkbox"
-            className="size-3.5 accent-accent"
-            checked={settings.launchAtLogin}
-            onChange={(e) => void patch({ launchAtLogin: e.target.checked })}
-          />
-          Launch at login
-        </label>
-        <label className="flex h-8 items-center gap-2 px-3 text-[12px]">
-          <input
-            type="checkbox"
-            className="size-3.5 accent-accent"
-            checked={settings.confirmActions}
-            onChange={(e) => void patch({ confirmActions: e.target.checked })}
-          />
-          Confirm before staging, discarding, and other file actions
-        </label>
-
-        <SectionLabel>Worktrees — open with…</SectionLabel>
-        <div className="px-3 pt-1">
-          <p className="mb-1.5 text-[10px] text-faint">
-            Commands to open a worktree. <span className="text-muted">{"{path}"}</span> is replaced
-            with the worktree folder; the selected default is used by the ↗ button.
-          </p>
-          <div className="flex flex-col gap-1.5">
-            {targets.map((t, i) => (
-              <div key={t.id} className="flex items-center gap-1.5">
-                <input
-                  type="radio"
-                  name="default-open-target"
-                  className="size-3.5 shrink-0 accent-accent"
-                  checked={settings.defaultOpenTarget === t.id}
-                  onChange={() => void patch({ defaultOpenTarget: t.id })}
-                  title="Use as the default (↗) target"
-                />
-                <input
-                  value={t.name}
-                  placeholder="Name"
-                  aria-label="Target name"
-                  onChange={(e) => editTarget(i, { name: e.target.value })}
-                  onBlur={commitTargets}
-                  className="w-20 shrink-0 rounded border border-edge bg-surface px-1.5 py-0.5 text-[12px] outline-none focus:border-accent"
-                />
-                <input
-                  value={t.command}
-                  placeholder="code {path}"
-                  aria-label="Target command"
-                  onChange={(e) => editTarget(i, { command: e.target.value })}
-                  onBlur={commitTargets}
-                  className="min-w-0 flex-1 rounded border border-edge bg-surface px-1.5 py-0.5 font-mono text-[11px] outline-none focus:border-accent"
-                />
                 <button
-                  aria-label={`Remove ${t.name}`}
+                  aria-label={`Remove ${r.name}`}
                   className="flex size-5 shrink-0 items-center justify-center rounded text-faint hover:bg-hover hover:text-del"
-                  onClick={() => removeOpenTarget(t.id)}
+                  onClick={(e) => setRemoveTarget({ x: e.clientX, y: e.clientY, repo: r })}
                 >
                   <XIcon />
                 </button>
               </div>
             ))}
           </div>
-          <button
-            className="mt-2 rounded border border-edge px-2 py-1 text-[11px] text-muted hover:bg-hover"
-            onClick={addTarget}
-          >
-            Add target…
-          </button>
-        </div>
+          <div className="px-3 pt-2">
+            <button
+              className="rounded border border-edge px-2 py-1 text-[11px] text-muted hover:bg-hover"
+              onClick={onAddRepo}
+            >
+              Add repository…
+            </button>
+          </div>
+        </Section>
 
-        <SectionLabel>Theme</SectionLabel>
-        <div className="grid grid-cols-3 gap-2 px-3 pt-1">
-          {THEME_NAMES.map((t) => {
-            const m = THEME_META[t];
-            const active = normalizeTheme(settings.theme) === t;
-            return (
-              <button
-                key={t}
-                aria-pressed={active}
-                onClick={() => void patch({ theme: t })}
-                className={`overflow-hidden rounded-md border text-left ${
-                  active ? "border-accent ring-1 ring-accent" : "border-edge hover:border-muted"
-                }`}
-              >
-                <div className="flex h-8 items-center justify-center gap-1" style={{ background: m.swatch[0] }}>
-                  <span className="size-2.5 rounded-full" style={{ background: m.swatch[2] }} />
-                  <span className="size-2.5 rounded-full" style={{ background: m.swatch[3] }} />
-                  <span className="size-2.5 rounded-full" style={{ background: m.swatch[1] }} />
-                </div>
-                <div className="px-2 py-1.5">
-                  <div className="flex items-center gap-1 text-[12px] font-medium text-fg">
-                    {m.label}
-                    {active && <span className="text-accent">✓</span>}
-                  </div>
-                  <div className="text-[10px] text-faint">{m.blurb}</div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <SectionLabel>Graph</SectionLabel>
-        <div className="flex items-center gap-2 px-3 py-1">
-          <label className="text-[12px] text-muted" htmlFor="commits-per-page">
-            Commits per page
+        <Section
+          title="General"
+          open={openSections.has("general")}
+          onToggle={() => toggleSection("general")}
+        >
+          <div className="px-3">
+            <label className="mb-1 block text-[11px] text-muted" htmlFor="shortcut-recorder">
+              Global shortcut
+            </label>
+            <button
+              id="shortcut-recorder"
+              type="button"
+              aria-label="Global shortcut recorder. Focus and press a key combination to set it."
+              onFocus={() => setRecording(true)}
+              onBlur={() => setRecording(false)}
+              onKeyDown={onShortcutKeyDown}
+              className={`w-full rounded border px-2 py-1 text-left text-[12px] outline-none ${
+                recording ? "border-accent text-accent" : "border-edge text-fg"
+              } bg-surface`}
+            >
+              {recording ? "Press a key combination… (Esc to cancel)" : settings.shortcut}
+            </button>
+          </div>
+          <label className="mt-1 flex h-8 items-center gap-2 px-3 text-[12px]">
+            <input
+              type="checkbox"
+              className="size-3.5 accent-accent"
+              checked={settings.launchAtLogin}
+              onChange={(e) => void patch({ launchAtLogin: e.target.checked })}
+            />
+            Launch at login
           </label>
-          <input
-            id="commits-per-page"
-            type="number"
-            min={50}
-            max={1000}
-            value={cppText}
-            onChange={(e) => setCppText(e.target.value)}
-            onBlur={commitCommitsPerPage}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-            }}
-            className="w-20 rounded border border-edge bg-surface px-1.5 py-0.5 text-[12px] outline-none"
-          />
-        </div>
-        <label className="flex h-8 items-center gap-2 px-3 text-[12px]">
-          <input
-            type="checkbox"
-            className="size-3.5 accent-accent"
-            checked={settings.showRemoteBranches}
-            onChange={(e) => void patch({ showRemoteBranches: e.target.checked })}
-          />
-          Show remote branches by default
-        </label>
+          <label className="flex h-8 items-center gap-2 px-3 text-[12px]">
+            <input
+              type="checkbox"
+              className="size-3.5 accent-accent"
+              checked={settings.confirmActions}
+              onChange={(e) => void patch({ confirmActions: e.target.checked })}
+            />
+            Confirm before staging, discarding, and other file actions
+          </label>
+        </Section>
+
+        <Section
+          title="Worktrees"
+          badge={settings.openTargets.length}
+          open={openSections.has("worktrees")}
+          onToggle={() => toggleSection("worktrees")}
+        >
+          <div className="px-3">
+            <p className="mb-1.5 text-[10px] text-faint">
+              Commands to open a worktree. <span className="text-muted">{"{path}"}</span> is replaced
+              with the worktree folder; the selected default is used by the ↗ button.
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {targets.map((t, i) => (
+                <div key={t.id} className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="default-open-target"
+                    className="size-3.5 shrink-0 accent-accent"
+                    checked={settings.defaultOpenTarget === t.id}
+                    onChange={() => void patch({ defaultOpenTarget: t.id })}
+                    title="Use as the default (↗) target"
+                  />
+                  <input
+                    value={t.name}
+                    placeholder="Name"
+                    aria-label="Target name"
+                    onChange={(e) => editTarget(i, { name: e.target.value })}
+                    onBlur={commitTargets}
+                    className="w-20 shrink-0 rounded border border-edge bg-surface px-1.5 py-0.5 text-[12px] outline-none focus:border-accent"
+                  />
+                  <input
+                    value={t.command}
+                    placeholder="code {path}"
+                    aria-label="Target command"
+                    onChange={(e) => editTarget(i, { command: e.target.value })}
+                    onBlur={commitTargets}
+                    className="min-w-0 flex-1 rounded border border-edge bg-surface px-1.5 py-0.5 font-mono text-[11px] outline-none focus:border-accent"
+                  />
+                  <button
+                    aria-label={`Remove ${t.name}`}
+                    className="flex size-5 shrink-0 items-center justify-center rounded text-faint hover:bg-hover hover:text-del"
+                    onClick={() => removeOpenTarget(t.id)}
+                  >
+                    <XIcon />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              className="mt-2 rounded border border-edge px-2 py-1 text-[11px] text-muted hover:bg-hover"
+              onClick={addTarget}
+            >
+              Add target…
+            </button>
+          </div>
+        </Section>
+
+        <Section
+          title="Appearance"
+          open={openSections.has("appearance")}
+          onToggle={() => toggleSection("appearance")}
+        >
+          <div className="grid grid-cols-3 gap-2 px-3">
+            {THEME_NAMES.map((t) => {
+              const m = THEME_META[t];
+              const active = normalizeTheme(settings.theme) === t;
+              return (
+                <button
+                  key={t}
+                  aria-pressed={active}
+                  onClick={() => void patch({ theme: t })}
+                  className={`overflow-hidden rounded-md border text-left ${
+                    active ? "border-accent ring-1 ring-accent" : "border-edge hover:border-muted"
+                  }`}
+                >
+                  <div className="flex h-8 items-center justify-center gap-1" style={{ background: m.swatch[0] }}>
+                    <span className="size-2.5 rounded-full" style={{ background: m.swatch[2] }} />
+                    <span className="size-2.5 rounded-full" style={{ background: m.swatch[3] }} />
+                    <span className="size-2.5 rounded-full" style={{ background: m.swatch[1] }} />
+                  </div>
+                  <div className="px-2 py-1.5">
+                    <div className="flex items-center gap-1 text-[12px] font-medium text-fg">
+                      {m.label}
+                      {active && <span className="text-accent">✓</span>}
+                    </div>
+                    <div className="text-[10px] text-faint">{m.blurb}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+
+        <Section
+          title="Graph"
+          open={openSections.has("graph")}
+          onToggle={() => toggleSection("graph")}
+        >
+          <div className="flex items-center gap-2 px-3 py-1">
+            <label className="text-[12px] text-muted" htmlFor="commits-per-page">
+              Commits per page
+            </label>
+            <input
+              id="commits-per-page"
+              type="number"
+              min={50}
+              max={1000}
+              value={cppText}
+              onChange={(e) => setCppText(e.target.value)}
+              onBlur={commitCommitsPerPage}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              className="w-20 rounded border border-edge bg-surface px-1.5 py-0.5 text-[12px] outline-none"
+            />
+          </div>
+          <label className="flex h-8 items-center gap-2 px-3 text-[12px]">
+            <input
+              type="checkbox"
+              className="size-3.5 accent-accent"
+              checked={settings.showRemoteBranches}
+              onChange={(e) => void patch({ showRemoteBranches: e.target.checked })}
+            />
+            Show remote branches by default
+          </label>
+        </Section>
       </div>
 
       {removeTarget && (
