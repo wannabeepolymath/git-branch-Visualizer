@@ -6,6 +6,7 @@ import {
   normalizeTheme,
   onRepoChanged,
   pickRepoFolder,
+  recenterWindow,
   setActiveRepo,
   type BranchInfo,
   type Settings,
@@ -16,6 +17,8 @@ import { Header } from "./components/Header";
 import { SettingsView } from "./components/SettingsView";
 import { Toast, useToast } from "./components/Toast";
 
+const DEFAULT_SIDEBAR_WIDTH = 168;
+
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
@@ -25,7 +28,7 @@ export default function App() {
   const [showSidebar, setShowSidebar] = useState(() => localStorage.getItem("bv.sidebar") !== "0");
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const n = Number(localStorage.getItem("bv.sidebarWidth"));
-    return Number.isFinite(n) && n >= 120 ? n : 168;
+    return Number.isFinite(n) && n >= 120 ? n : DEFAULT_SIDEBAR_WIDTH;
   });
   const startSidebarResize = (e: ReactMouseEvent) => {
     e.preventDefault();
@@ -55,6 +58,12 @@ export default function App() {
     [],
   );
   const { toast, show } = useToast();
+  // Reset button: restore window size/position AND the branch panel width to defaults.
+  const resetWindow = useCallback(() => {
+    setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+    localStorage.setItem("bv.sidebarWidth", String(DEFAULT_SIDEBAR_WIDTH));
+    recenterWindow().catch((e: unknown) => show(String(e)));
+  }, [show]);
 
   const activeRepo = settings?.repos.find((r) => r.id === settings.activeRepoId) ?? null;
   const repoId = activeRepo?.id ?? null;
@@ -165,6 +174,7 @@ export default function App() {
         onToggleSettings={() => setView((v) => (v === "settings" ? "main" : "settings"))}
         onChanged={refresh}
         onToast={show}
+        onResetWindow={resetWindow}
       />
       {view === "settings" ? (
         <SettingsView

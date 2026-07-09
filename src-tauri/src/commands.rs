@@ -24,6 +24,26 @@ pub fn get_settings(state: State<AppState>) -> Result<Settings, String> {
     state.snapshot()
 }
 
+/// Reset the popover to its default size and re-anchor it under the tray icon
+/// (manual override for when the user has dragged/resized it away). See
+/// `toggle_popover`. Resize happens first because TrayCenter's x depends on the
+/// window width.
+// ponytail: default size mirrors tauri.conf.json's window config — keep in sync.
+#[tauri::command]
+pub fn recenter_window(app: AppHandle) -> Result<(), String> {
+    use tauri::{LogicalSize, Manager};
+    use tauri_plugin_positioner::{Position, WindowExt};
+    let window = app
+        .get_webview_window(crate::MAIN_WINDOW)
+        .ok_or("main window not found")?;
+    window
+        .set_size(LogicalSize::new(420.0, 560.0))
+        .map_err(|e| e.to_string())?;
+    window
+        .move_window(Position::TrayCenter)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn update_settings(
     app: AppHandle,

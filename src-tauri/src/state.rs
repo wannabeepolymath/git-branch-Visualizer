@@ -57,6 +57,9 @@ pub struct AppState {
     pub watchers: Mutex<HashMap<String, RecommendedWatcher>>,
     /// True while a native dialog is open — suppresses the popover's hide-on-blur.
     pub dialog_open: AtomicBool,
+    /// Set once the popover has been anchored under the tray icon. After that we
+    /// reopen wherever the user last left it instead of re-centering every time.
+    pub positioned: AtomicBool,
 }
 
 impl AppState {
@@ -71,6 +74,7 @@ impl AppState {
             config_path,
             watchers: Mutex::new(HashMap::new()),
             dialog_open: AtomicBool::new(false),
+            positioned: AtomicBool::new(false),
         }
     }
 

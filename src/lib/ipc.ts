@@ -67,6 +67,9 @@ export interface Settings {
 
 export const getSettings = (): Promise<Settings> => invoke("get_settings");
 
+/** Re-anchor the popover window under the tray icon. */
+export const recenterWindow = (): Promise<void> => invoke("recenter_window");
+
 export const updateSettings = (settings: Settings): Promise<Settings> =>
   invoke("update_settings", { settings });
 

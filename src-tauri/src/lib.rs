@@ -22,7 +22,17 @@ fn toggle_popover(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(false) {
         let _ = window.hide();
     } else {
-        let _ = window.move_window(Position::TrayCenter);
+        // Anchor under the tray icon only the first time. Afterwards the window
+        // reopens wherever the user last left it (its move/resize is preserved,
+        // since the window is only hidden, never destroyed). The header's
+        // "Recenter" button re-anchors on demand.
+        let first_show = window
+            .app_handle()
+            .try_state::<AppState>()
+            .is_none_or(|s| !s.positioned.swap(true, std::sync::atomic::Ordering::SeqCst));
+        if first_show {
+            let _ = window.move_window(Position::TrayCenter);
+        }
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -41,6 +51,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
             commands::update_settings,
+            commands::recenter_window,
             commands::pick_repo_folder,
             commands::add_repo,
             commands::remove_repo,

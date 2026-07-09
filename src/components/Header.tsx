@@ -68,6 +68,16 @@ function BackIcon() {
   );
 }
 
+function RecenterIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="7" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+    </svg>
+  );
+}
+
 function GearIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -123,6 +133,7 @@ export function Header({
   onToggleSettings,
   onChanged,
   onToast,
+  onResetWindow,
 }: {
   settings: Settings;
   activeRepo: RepoInfo | null;
@@ -134,6 +145,7 @@ export function Header({
   onToggleSettings: () => void;
   onChanged: () => void;
   onToast: (msg: string) => void;
+  onResetWindow: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -238,6 +250,10 @@ export function Header({
       )}
 
       <div data-tauri-drag-region="" className="h-full flex-1" />
+
+      <IconButton label="Reset size & position" onClick={onResetWindow}>
+        <RecenterIcon />
+      </IconButton>
 
       {!inSettings && (
         <>
