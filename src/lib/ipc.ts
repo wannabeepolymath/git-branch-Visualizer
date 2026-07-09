@@ -64,6 +64,13 @@ export function normalizeTheme(t: string): ThemeName {
   return t === "paper" || t === "terminal" ? t : "graphite";
 }
 
+/** A configurable "open worktree with…" action. `command` holds a {path} token. */
+export interface OpenTarget {
+  id: string;
+  name: string;
+  command: string;
+}
+
 export interface Settings {
   repos: RepoInfo[];
   activeRepoId: string | null;
@@ -73,6 +80,8 @@ export interface Settings {
   commitsPerPage: number;
   showRemoteBranches: boolean;
   confirmActions: boolean;
+  openTargets: OpenTarget[];
+  defaultOpenTarget: string | null; // OpenTarget id used by the one-click ↗
 }
 
 export const getSettings = (): Promise<Settings> => invoke("get_settings");
@@ -97,6 +106,13 @@ export const getBranches = (repoId: string): Promise<BranchInfo[]> =>
 
 export const getWorktrees = (repoId: string): Promise<WorktreeInfo[]> =>
   invoke("get_worktrees", { repoId });
+
+/** Open a worktree dir with the given configured target (editor/terminal/…). */
+export const openWorktree = (
+  repoId: string,
+  worktreePath: string,
+  targetId: string,
+): Promise<void> => invoke("open_worktree", { repoId, worktreePath, targetId });
 
 export const getLog = (
   repoId: string,

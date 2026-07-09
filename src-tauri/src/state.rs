@@ -16,6 +16,16 @@ pub struct RepoInfo {
     pub path: String,
 }
 
+/// A user-configurable "open worktree with…" action. `command` is a shell command
+/// template holding a `{path}` placeholder, filled with the worktree directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenTarget {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -30,10 +40,34 @@ pub struct Settings {
     /// `serde(default)` keeps pre-existing config files loadable (defaults to on).
     #[serde(default = "default_true")]
     pub confirm_actions: bool,
+    /// "Open worktree with…" targets and which one the one-click ↗ uses.
+    #[serde(default = "default_open_targets")]
+    pub open_targets: Vec<OpenTarget>,
+    #[serde(default = "default_open_target_id")]
+    pub default_open_target: Option<String>,
 }
 
 fn default_true() -> bool {
     true
+}
+
+// ponytail: macOS defaults (v1 target). `open` is macOS-only; move these behind
+// platform:: when Windows/Linux seeds are needed.
+fn default_open_targets() -> Vec<OpenTarget> {
+    let t = |id: &str, name: &str, command: &str| OpenTarget {
+        id: id.to_string(),
+        name: name.to_string(),
+        command: command.to_string(),
+    };
+    vec![
+        t("editor", "Editor", "code {path}"),
+        t("terminal", "Terminal", "open -a Terminal {path}"),
+        t("finder", "Finder", "open {path}"),
+    ]
+}
+
+fn default_open_target_id() -> Option<String> {
+    Some("editor".to_string())
 }
 
 impl Settings {
@@ -47,6 +81,8 @@ impl Settings {
             commits_per_page: 200,
             show_remote_branches: true,
             confirm_actions: true,
+            open_targets: default_open_targets(),
+            default_open_target: default_open_target_id(),
         }
     }
 }
@@ -125,5 +161,19 @@ mod tests {
         }"#;
         let s: Settings = serde_json::from_str(json).expect("old config should still parse");
         assert!(s.confirm_actions);
+    }
+
+    #[test]
+    fn old_config_gets_seeded_open_targets() {
+        // A config written before open targets existed must load with them seeded,
+        // defaulting the one-click target to the editor.
+        let json = r#"{
+            "repos": [], "activeRepoId": null, "shortcut": "Alt+Shift+G",
+            "launchAtLogin": false, "theme": "graphite",
+            "commitsPerPage": 200, "showRemoteBranches": true
+        }"#;
+        let s: Settings = serde_json::from_str(json).expect("old config should still parse");
+        assert_eq!(s.open_targets.len(), 3);
+        assert_eq!(s.default_open_target.as_deref(), Some("editor"));
     }
 }

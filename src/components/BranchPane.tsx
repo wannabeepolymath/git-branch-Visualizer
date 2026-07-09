@@ -5,6 +5,7 @@ import {
   deleteBranch,
   renameBranch,
   type BranchInfo,
+  type OpenTarget,
   type WorktreeInfo,
 } from "../lib/ipc";
 import { relTime } from "../lib/relTime";
@@ -59,6 +60,8 @@ export function BranchPane({
   worktrees,
   focusedWorktreePath,
   onFocusWorktree,
+  openTargets,
+  defaultOpenTarget,
   selectedRefs,
   onSelect,
   showRemoteDefault,
@@ -70,6 +73,8 @@ export function BranchPane({
   worktrees: WorktreeInfo[];
   focusedWorktreePath: string;
   onFocusWorktree: (path: string) => void;
+  openTargets: OpenTarget[];
+  defaultOpenTarget: string | null;
   selectedRefs: string[];
   onSelect: (ref: string | null, additive: boolean) => void;
   showRemoteDefault: boolean;
@@ -224,11 +229,15 @@ export function BranchPane({
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
         {tab === "worktrees" ? (
           <WorktreePane
+            repoId={repoId}
             worktrees={worktrees}
             branches={branches}
             focusedPath={focusedWorktreePath}
             onFocus={onFocusWorktree}
             filter={filter}
+            openTargets={openTargets}
+            defaultOpenTarget={defaultOpenTarget}
+            onToast={onToast}
           />
         ) : (
           <>

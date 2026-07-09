@@ -218,6 +218,26 @@ pub async fn get_worktrees(
     git::get_worktrees(&path)
 }
 
+/// Open a worktree with a configured target (editor / terminal / file manager).
+#[tauri::command]
+pub async fn open_worktree(
+    state: State<'_, AppState>,
+    repo_id: String,
+    worktree_path: String,
+    target_id: String,
+) -> Result<(), String> {
+    let path = work_dir(&state, &repo_id, Some(worktree_path))?;
+    let command = {
+        let s = state.settings.lock().map_err(|e| e.to_string())?;
+        s.open_targets
+            .iter()
+            .find(|t| t.id == target_id)
+            .map(|t| t.command.clone())
+    }
+    .ok_or_else(|| format!("open target not found: {target_id}"))?;
+    crate::open::run(&command, &path)
+}
+
 #[tauri::command]
 pub async fn get_log(
     state: State<'_, AppState>,

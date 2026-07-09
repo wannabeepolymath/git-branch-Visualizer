@@ -254,6 +254,8 @@ export default function App() {
                   worktrees={worktrees}
                   focusedWorktreePath={focusedWorktree}
                   onFocusWorktree={setFocusedWorktree}
+                  openTargets={settings.openTargets}
+                  defaultOpenTarget={settings.defaultOpenTarget}
                   selectedRefs={selectedRefs}
                   onSelect={selectRef}
                   showRemoteDefault={settings.showRemoteBranches}

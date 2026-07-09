@@ -5,6 +5,7 @@ import {
   removeRepo,
   THEME_NAMES,
   updateSettings,
+  type OpenTarget,
   type RepoInfo,
   type Settings,
   type ThemeName,
@@ -74,11 +75,41 @@ export function SettingsView({
   const [recording, setRecording] = useState(false);
   const [cppText, setCppText] = useState(String(settings.commitsPerPage));
   useEffect(() => setCppText(String(settings.commitsPerPage)), [settings.commitsPerPage]);
+  // Local copy for smooth typing; persisted on blur (like commits-per-page).
+  const [targets, setTargets] = useState<OpenTarget[]>(settings.openTargets);
+  useEffect(() => setTargets(settings.openTargets), [settings.openTargets]);
 
   const patch = (next: Partial<Settings>) =>
     updateSettings({ ...settings, ...next })
       .then(onSettingsChange)
       .catch((e: unknown) => onToast(String(e)));
+
+  const editTarget = (i: number, next: Partial<OpenTarget>) =>
+    setTargets((ts) => ts.map((t, j) => (j === i ? { ...t, ...next } : t)));
+
+  const commitTargets = () => {
+    if (JSON.stringify(targets) !== JSON.stringify(settings.openTargets)) {
+      void patch({ openTargets: targets });
+    }
+  };
+
+  const addTarget = () =>
+    void patch({
+      openTargets: [
+        ...settings.openTargets,
+        { id: crypto.randomUUID(), name: "New", command: "code {path}" },
+      ],
+    });
+
+  const removeOpenTarget = (id: string) => {
+    const next = settings.openTargets.filter((t) => t.id !== id);
+    void patch({
+      openTargets: next,
+      // Keep the default pointing at something real.
+      defaultOpenTarget:
+        settings.defaultOpenTarget === id ? (next[0]?.id ?? null) : settings.defaultOpenTarget,
+    });
+  };
 
   const commitCommitsPerPage = () => {
     const parsed = Math.round(Number(cppText));
@@ -183,6 +214,58 @@ export function SettingsView({
           />
           Confirm before staging, discarding, and other file actions
         </label>
+
+        <SectionLabel>Worktrees — open with…</SectionLabel>
+        <div className="px-3 pt-1">
+          <p className="mb-1.5 text-[10px] text-faint">
+            Commands to open a worktree. <span className="text-muted">{"{path}"}</span> is replaced
+            with the worktree folder; the selected default is used by the ↗ button.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {targets.map((t, i) => (
+              <div key={t.id} className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="default-open-target"
+                  className="size-3.5 shrink-0 accent-accent"
+                  checked={settings.defaultOpenTarget === t.id}
+                  onChange={() => void patch({ defaultOpenTarget: t.id })}
+                  title="Use as the default (↗) target"
+                />
+                <input
+                  value={t.name}
+                  placeholder="Name"
+                  aria-label="Target name"
+                  onChange={(e) => editTarget(i, { name: e.target.value })}
+                  onBlur={commitTargets}
+                  className="w-20 shrink-0 rounded border border-edge bg-surface px-1.5 py-0.5 text-[12px] outline-none focus:border-accent"
+                />
+                <input
+                  value={t.command}
+                  placeholder="code {path}"
+                  aria-label="Target command"
+                  onChange={(e) => editTarget(i, { command: e.target.value })}
+                  onBlur={commitTargets}
+                  className="min-w-0 flex-1 rounded border border-edge bg-surface px-1.5 py-0.5 font-mono text-[11px] outline-none focus:border-accent"
+                />
+                <button
+                  aria-label={`Remove ${t.name}`}
+                  className="flex size-5 shrink-0 items-center justify-center rounded text-faint hover:bg-hover hover:text-del"
+                  onClick={() => removeOpenTarget(t.id)}
+                >
+                  <XIcon />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            className="mt-2 rounded border border-edge px-2 py-1 text-[11px] text-muted hover:bg-hover"
+            onClick={addTarget}
+          >
+            Add target…
+          </button>
+        </div>
+
         <SectionLabel>Theme</SectionLabel>
         <div className="grid grid-cols-3 gap-2 px-3 pt-1">
           {THEME_NAMES.map((t) => {

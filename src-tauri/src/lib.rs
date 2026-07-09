@@ -3,6 +3,7 @@
 
 mod commands;
 mod git;
+mod open;
 mod platform;
 mod state;
 mod watcher;
@@ -58,6 +59,7 @@ pub fn run() {
             commands::set_active_repo,
             commands::get_branches,
             commands::get_worktrees,
+            commands::open_worktree,
             commands::get_log,
             commands::get_commit,
             commands::get_status,
