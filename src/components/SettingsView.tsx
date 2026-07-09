@@ -132,7 +132,7 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-edge bg-panel">
+    <div className="shrink-0 overflow-hidden rounded-lg border border-edge bg-panel">
       <button
         type="button"
         aria-expanded={open}
