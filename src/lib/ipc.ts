@@ -85,6 +85,26 @@ export const getCommit = (repoId: string, hash: string): Promise<CommitDetail> =
 export const getStatus = (repoId: string): Promise<WorkingStatus> =>
   invoke("get_status", { repoId });
 
+/** Unified diff for one path. `staged` = index vs HEAD; else worktree vs index. */
+export const diffFile = (
+  repoId: string,
+  path: string,
+  staged: boolean,
+  untracked: boolean,
+): Promise<string> => invoke("diff_file", { repoId, path, staged, untracked });
+
+export const stageFiles = (repoId: string, paths: string[]): Promise<void> =>
+  invoke("stage_files", { repoId, paths });
+
+export const unstageFiles = (repoId: string, paths: string[]): Promise<void> =>
+  invoke("unstage_files", { repoId, paths });
+
+export const discardFiles = (
+  repoId: string,
+  paths: string[],
+  untracked: boolean,
+): Promise<void> => invoke("discard_files", { repoId, paths, untracked });
+
 export const checkout = (repoId: string, refName: string): Promise<void> =>
   invoke("checkout", { repoId, refName });
 

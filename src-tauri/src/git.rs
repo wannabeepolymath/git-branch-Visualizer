@@ -55,7 +55,9 @@ pub struct WorkingStatus {
 
 /// Run git in `repo` with locks disabled and terminal prompts suppressed.
 /// Returns stdout on success, trimmed stderr as the error otherwise.
-fn git(repo: &str, args: &[&str]) -> Result<String, String> {
+/// `allow_one` also accepts exit status 1 (used by `git diff --no-index`,
+/// which signals "differences found" — not an error — with code 1).
+fn git_ok(repo: &str, args: &[&str], allow_one: bool) -> Result<String, String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(repo)
@@ -64,7 +66,7 @@ fn git(repo: &str, args: &[&str]) -> Result<String, String> {
         .env("GIT_TERMINAL_PROMPT", "0")
         .output()
         .map_err(|e| format!("failed to run git: {e}"))?;
-    if out.status.success() {
+    if out.status.success() || (allow_one && out.status.code() == Some(1)) {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {
         let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
@@ -74,6 +76,10 @@ fn git(repo: &str, args: &[&str]) -> Result<String, String> {
             err
         })
     }
+}
+
+fn git(repo: &str, args: &[&str]) -> Result<String, String> {
+    git_ok(repo, args, false)
 }
 
 /// git version of a for-each-ref line: fields separated by NUL.
@@ -290,7 +296,50 @@ pub fn get_status(repo: &str) -> Result<WorkingStatus, String> {
     Ok(parse_status_porcelain(&out))
 }
 
+/// Unified diff for one path. `staged` diffs the index against HEAD; otherwise
+/// the worktree against the index. `untracked` files have no other side, so we
+/// diff against /dev/null to render the whole file as additions.
+// ponytail: /dev/null is the special token git understands on all platforms for
+// --no-index; fine for this macOS app.
+pub fn diff_file(repo: &str, path: &str, staged: bool, untracked: bool) -> Result<String, String> {
+    if untracked {
+        return git_ok(repo, &["diff", "--no-index", "--", "/dev/null", path], true);
+    }
+    let mut args = vec!["diff"];
+    if staged {
+        args.push("--cached");
+    }
+    args.push("--");
+    args.push(path);
+    git(repo, &args)
+}
+
+/// Build `[cmd..., "--", paths...]` — the `--` stops paths being read as flags.
+fn with_paths<'a>(head: &[&'a str], paths: &'a [String]) -> Vec<&'a str> {
+    let mut args: Vec<&str> = head.to_vec();
+    args.push("--");
+    args.extend(paths.iter().map(String::as_str));
+    args
+}
+
 // ---- write / network ops ----
+
+/// Stage paths into the index (`git add` — covers modified, deleted, untracked).
+pub fn stage(repo: &str, paths: &[String]) -> Result<(), String> {
+    git(repo, &with_paths(&["add"], paths)).map(|_| ())
+}
+
+/// Unstage paths, leaving worktree contents untouched.
+pub fn unstage(repo: &str, paths: &[String]) -> Result<(), String> {
+    git(repo, &with_paths(&["restore", "--staged"], paths)).map(|_| ())
+}
+
+/// Discard worktree changes. `untracked` files are removed from disk (`git clean`);
+/// tracked files are reverted to their index contents (`git restore`). Destructive.
+pub fn discard(repo: &str, paths: &[String], untracked: bool) -> Result<(), String> {
+    let head: &[&str] = if untracked { &["clean", "-f"] } else { &["restore"] };
+    git(repo, &with_paths(head, paths)).map(|_| ())
+}
 
 pub fn checkout(repo: &str, ref_name: &str) -> Result<(), String> {
     git(repo, &["checkout", ref_name]).map(|_| ())
@@ -405,6 +454,13 @@ mod tests {
         assert_eq!((s.unstaged[0].status.as_str(), s.unstaged[0].path.as_str()), ("M", "src/a.rs"));
         assert_eq!((s.unstaged[1].status.as_str(), s.unstaged[1].path.as_str()), ("?", "junk.txt"));
         assert_eq!((s.unstaged[2].status.as_str(), s.unstaged[2].path.as_str()), ("D", "gone.rs"));
+    }
+
+    #[test]
+    fn with_paths_inserts_separator() {
+        let paths = vec!["a.rs".to_string(), "-weird".to_string()];
+        assert_eq!(with_paths(&["add"], &paths), vec!["add", "--", "a.rs", "-weird"]);
+        assert_eq!(with_paths(&["restore", "--staged"], &[]), vec!["restore", "--staged", "--"]);
     }
 
     #[test]

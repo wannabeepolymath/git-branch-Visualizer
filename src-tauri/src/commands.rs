@@ -198,6 +198,49 @@ pub async fn get_status(
 }
 
 #[tauri::command]
+pub async fn diff_file(
+    state: State<'_, AppState>,
+    repo_id: String,
+    path: String,
+    staged: bool,
+    untracked: bool,
+) -> Result<String, String> {
+    let repo = state.repo_path(&repo_id)?;
+    git::diff_file(&repo, &path, staged, untracked)
+}
+
+#[tauri::command]
+pub async fn stage_files(
+    state: State<'_, AppState>,
+    repo_id: String,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    let repo = state.repo_path(&repo_id)?;
+    git::stage(&repo, &paths)
+}
+
+#[tauri::command]
+pub async fn unstage_files(
+    state: State<'_, AppState>,
+    repo_id: String,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    let repo = state.repo_path(&repo_id)?;
+    git::unstage(&repo, &paths)
+}
+
+#[tauri::command]
+pub async fn discard_files(
+    state: State<'_, AppState>,
+    repo_id: String,
+    paths: Vec<String>,
+    untracked: bool,
+) -> Result<(), String> {
+    let repo = state.repo_path(&repo_id)?;
+    git::discard(&repo, &paths, untracked)
+}
+
+#[tauri::command]
 pub async fn checkout(
     state: State<'_, AppState>,
     repo_id: String,
