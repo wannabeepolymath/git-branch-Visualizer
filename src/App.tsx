@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouse
 import {
   addRepo,
   getBranches,
+  getWorktrees,
   getSettings,
   normalizeTheme,
   onRepoChanged,
@@ -10,6 +11,7 @@ import {
   setActiveRepo,
   type BranchInfo,
   type Settings,
+  type WorktreeInfo,
 } from "./lib/ipc";
 import { BranchPane } from "./components/BranchPane";
 import { CommitGraph } from "./components/CommitGraph";
@@ -22,6 +24,10 @@ const DEFAULT_SIDEBAR_WIDTH = 168;
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
+  // Path of the worktree the app is acting on. "" means "not yet resolved" — the
+  // worktrees fetch defaults it to the main worktree and self-heals if it vanishes.
+  const [focusedWorktree, setFocusedWorktree] = useState<string>("");
   const [selectedRefs, setSelectedRefs] = useState<string[]>([]);
   const [view, setView] = useState<"main" | "settings">("main");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -95,6 +101,7 @@ export default function App() {
 
   useEffect(() => {
     setSelectedRefs([]);
+    setFocusedWorktree(""); // re-defaults to the new repo's main worktree on next fetch
   }, [repoId]);
 
   useEffect(() => {
@@ -112,6 +119,29 @@ export default function App() {
       live = false;
     };
   }, [repoId, refreshKey, settings?.showRemoteBranches, show]);
+
+  useEffect(() => {
+    if (!repoId) {
+      setWorktrees([]);
+      return;
+    }
+    let live = true;
+    getWorktrees(repoId)
+      .then((ws) => {
+        if (!live) return;
+        setWorktrees(ws);
+        // Default focus to the main worktree; self-heal if the focused one is gone.
+        setFocusedWorktree((cur) =>
+          ws.some((w) => w.path === cur)
+            ? cur
+            : (ws.find((w) => w.isMain)?.path ?? ws[0]?.path ?? ""),
+        );
+      })
+      .catch((e: unknown) => show(String(e)));
+    return () => {
+      live = false;
+    };
+  }, [repoId, refreshKey, show]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -207,6 +237,9 @@ export default function App() {
                   key={activeRepo.id}
                   repoId={activeRepo.id}
                   branches={branches}
+                  worktrees={worktrees}
+                  focusedWorktreePath={focusedWorktree}
+                  onFocusWorktree={setFocusedWorktree}
                   selectedRefs={selectedRefs}
                   onSelect={selectRef}
                   showRemoteDefault={settings.showRemoteBranches}

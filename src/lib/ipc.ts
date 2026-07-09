@@ -45,6 +45,16 @@ export interface WorkingStatus {
   unstaged: FileChange[]; // untracked files appear here with status "?"
 }
 
+export interface WorktreeInfo {
+  path: string;
+  branch: string | null; // null = detached HEAD (or bare main)
+  head: string; // full SHA; shorten for detached display
+  isMain: boolean;
+  dirty: boolean;
+  locked: boolean;
+  prunable: boolean;
+}
+
 /** Visual identity. Each is a complete, self-contained look (see index.css). */
 export type ThemeName = "graphite" | "paper" | "terminal";
 export const THEME_NAMES: ThemeName[] = ["graphite", "paper", "terminal"];
@@ -84,6 +94,9 @@ export const setActiveRepo = (repoId: string): Promise<void> =>
 
 export const getBranches = (repoId: string): Promise<BranchInfo[]> =>
   invoke("get_branches", { repoId });
+
+export const getWorktrees = (repoId: string): Promise<WorktreeInfo[]> =>
+  invoke("get_worktrees", { repoId });
 
 export const getLog = (
   repoId: string,
