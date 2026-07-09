@@ -128,6 +128,8 @@ function statusColor(status: string): string {
       return "text-ren";
     case "?":
       return "text-add"; // untracked (new file)
+    case "U":
+      return "text-warn"; // merge conflict
     default:
       return "text-muted";
   }
@@ -331,13 +333,36 @@ function WorkingChanges({
   useEffect(() => {
     load();
   }, [load, refreshKey]);
-  // A reload can move/remove rows; collapse any open diff and disarm any pending
-  // confirm so neither points at a now-stale row.
+  // A reload can move/remove rows. Keep the open diff and any armed confirm as
+  // long as their row still exists (background watcher events must not yank the
+  // diff the user is reading); refresh the diff text since content may have
+  // changed. Only rows that vanished get collapsed/disarmed.
   useEffect(() => {
-    setOpenDiff(null);
-    setDiffText(null);
-    setPending(null);
-  }, [status]);
+    if (!status) return;
+    const find = (key: string) =>
+      (key.startsWith("s:") ? status.staged : status.unstaged).find(
+        (f) => f.path === key.slice(2),
+      );
+    setPending((p) => {
+      if (!p) return null;
+      if (p.id === "all:staged") return status.staged.length > 0 ? p : null;
+      if (p.id === "all:unstaged") return status.unstaged.length > 0 ? p : null;
+      return find(p.id) ? p : null;
+    });
+    const key = openDiffRef.current;
+    if (!key) return;
+    const f = find(key);
+    if (!f) {
+      setOpenDiff(null);
+      setDiffText(null);
+      return;
+    }
+    diffFile(repoId, f.path, key.startsWith("s:"), f.status === "?", worktreePath)
+      .then((t) => {
+        if (openDiffRef.current === key) setDiffText(t);
+      })
+      .catch(() => {}); // stale text is fine; the next toggle refetches
+  }, [status, repoId, worktreePath]);
 
   const staged = status?.staged ?? [];
   const unstaged = status?.unstaged ?? [];
@@ -400,6 +425,7 @@ function WorkingChanges({
   const renderFile = (f: FileChange, isStaged: boolean) => {
     const key = `${isStaged ? "s" : "u"}:${f.path}`;
     const armed = pending?.id === key;
+    const conflict = f.status === "U"; // staging a conflict = git add = mark resolved
     const actions = armed ? (
       confirmUI(pending)
     ) : isStaged ? (
@@ -417,13 +443,17 @@ function WorkingChanges({
     ) : (
       <>
         <ActBtn
-          label="Stage"
-          title="Stage"
+          label={conflict ? "Resolve" : "Stage"}
+          title={conflict ? "Mark resolved (git add)" : "Stage"}
           onClick={() =>
             arm({
               id: key,
-              label: "Stage",
-              run: () => act(stageFiles(repoId, [f.path], worktreePath), "Staged"),
+              label: conflict ? "Mark resolved" : "Stage",
+              run: () =>
+                act(
+                  stageFiles(repoId, [f.path], worktreePath),
+                  conflict ? "Marked resolved" : "Staged",
+                ),
             })
           }
         />
@@ -556,6 +586,9 @@ export function CommitGraph({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
+  // Bumped on every repo/refs switch; in-flight loadMore pages from a previous
+  // query check it before appending (else they'd land in the new list).
+  const queryGenRef = useRef(0);
   const expandedHashRef = useRef<string | null>(null);
   expandedHashRef.current = expandedHash;
   const lenRef = useRef(0);
@@ -567,6 +600,7 @@ export function CommitGraph({
   // Initial load / branch or repo switch: reset everything.
   useEffect(() => {
     let live = true;
+    queryGenRef.current += 1;
     setCommits([]);
     setDone(false);
     setLoading(true);
@@ -621,10 +655,17 @@ export function CommitGraph({
   const loadMore = () => {
     if (loadingMoreRef.current || done || loading) return;
     loadingMoreRef.current = true;
+    const gen = queryGenRef.current;
     getLog(repoId, refs, lenRef.current, pageSize)
       .then((next) => {
+        if (gen !== queryGenRef.current) return; // repo/refs switched mid-flight
         if (next.length < pageSize) setDone(true);
-        setCommits((cur) => [...cur, ...next]);
+        // Dedupe by hash: skip-based paging can overlap when commits land
+        // between pages (duplicate keys would break React + the graph layout).
+        setCommits((cur) => {
+          const seen = new Set(cur.map((c) => c.hash));
+          return [...cur, ...next.filter((c) => !seen.has(c.hash))];
+        });
       })
       .catch((e: unknown) => onToast(String(e)))
       .finally(() => {

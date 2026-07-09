@@ -106,6 +106,8 @@ export function BranchPane({
     y: number;
     kind: PromptKind;
     branch: BranchInfo;
+    /** Delete escalated to -D after git refused -d with "not fully merged". */
+    force?: boolean;
   } | null>(null);
 
   const f = filter.trim().toLowerCase();
@@ -116,7 +118,11 @@ export function BranchPane({
     worktrees.map((w) => w.branch).filter((b): b is string => !!b),
   );
   const focusedWt = worktrees.find((w) => w.path === focusedWorktreePath);
-  const currentName = focusedWt?.branch ?? branches.find((b) => b.isCurrent)?.name ?? null;
+  // A known-but-detached focused worktree has NO current branch — don't fall
+  // back to the main worktree's HEAD and mark the wrong branch.
+  const currentName = focusedWt
+    ? focusedWt.branch
+    : (branches.find((b) => b.isCurrent)?.name ?? null);
   const current = branches.filter((b) => !b.isRemote && b.name === currentName && match(b));
   const local = branches.filter((b) => !b.isRemote && b.name !== currentName && match(b));
   const remote = branches.filter((b) => b.isRemote && match(b));
@@ -136,10 +142,14 @@ export function BranchPane({
 
   const menuItems = (m: { x: number; y: number; branch: BranchInfo }): MenuItem[] => {
     const b = m.branch;
+    // For a remote branch, check out the local name ("origin/feat/x" → "feat/x"):
+    // git's checkout DWIM creates a tracking branch (or switches to the existing
+    // local one) instead of leaving a detached HEAD on the remote ref.
+    const target = b.isRemote ? b.name.split("/").slice(1).join("/") || b.name : b.name;
     const items: MenuItem[] = [
       {
         label: "Checkout",
-        onClick: () => run(checkout(repoId, b.name, worktreeArg), `Checked out ${b.name}`),
+        onClick: () => run(checkout(repoId, target, worktreeArg), `Checked out ${target}`),
       },
       {
         label: "New branch from here…",
@@ -152,7 +162,8 @@ export function BranchPane({
       if (b.upstream) {
         items.push({
           label: b.ahead > 0 ? `Push (${b.ahead})` : "Push",
-          onClick: () => run(pushBranch(repoId, b.name, false, false), `Pushed ${b.name}`),
+          onClick: () =>
+            run(pushBranch(repoId, b.name, b.upstream, false, false), `Pushed ${b.name}`),
         });
         items.push({
           label: "Force push…",
@@ -161,7 +172,7 @@ export function BranchPane({
       } else {
         items.push({
           label: "Publish branch",
-          onClick: () => run(pushBranch(repoId, b.name, true, false), `Published ${b.name}`),
+          onClick: () => run(pushBranch(repoId, b.name, null, true, false), `Published ${b.name}`),
         });
       }
       items.push(
@@ -366,21 +377,32 @@ export function BranchPane({
                 confirmLabel="Force push"
                 danger
                 onConfirm={async () => {
-                  await pushBranch(repoId, b.name, false, true);
+                  await pushBranch(repoId, b.name, b.upstream, false, true);
                   onToast(`Force-pushed ${b.name}`);
                   onChanged();
                 }}
               />
             );
           }
+          const force = prompt.force ?? false;
           return (
             <PromptPopover
               {...common}
-              title={`Delete "${b.name}"?`}
-              confirmLabel="Delete"
+              title={force ? `Force-delete "${b.name}"?` : `Delete "${b.name}"?`}
+              confirmLabel={force ? "Force delete" : "Delete"}
               danger
               onConfirm={async () => {
-                await deleteBranch(repoId, b.name);
+                try {
+                  await deleteBranch(repoId, b.name, force);
+                } catch (e) {
+                  // Safe delete refused: escalate the same popover to -D and let
+                  // the user decide, instead of dead-ending on the error.
+                  if (!force && String(e).includes("not fully merged")) {
+                    setPrompt((p) => (p ? { ...p, force: true } : p));
+                    throw `${String(e)}\nPress "Force delete" to delete it anyway.`;
+                  }
+                  throw e;
+                }
                 onToast(`Deleted ${b.name}`);
                 onChanged();
               }}

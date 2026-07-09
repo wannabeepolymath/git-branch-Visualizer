@@ -135,6 +135,7 @@ export function Header({
   onToast,
   onResetWindow,
   focusedWorktreeLabel,
+  worktreeArg,
   onClearFocus,
 }: {
   settings: Settings;
@@ -150,6 +151,8 @@ export function Header({
   onResetWindow: () => void;
   /** Branch/short-SHA of the focused worktree, when it isn't the main one. */
   focusedWorktreeLabel?: string;
+  /** Focused worktree path for pull; undefined = the repo's main worktree. */
+  worktreeArg?: string;
   onClearFocus: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -173,7 +176,7 @@ export function Header({
   const doPull = () => {
     if (!activeRepo || pulling) return;
     setPulling(true);
-    pullRepo(activeRepo.id)
+    pullRepo(activeRepo.id, worktreeArg)
       .then(() => {
         onToast("Pulled");
         onChanged();
