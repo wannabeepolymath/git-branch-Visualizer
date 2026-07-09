@@ -67,7 +67,7 @@ fn default_open_targets() -> Vec<OpenTarget> {
 }
 
 fn default_open_target_id() -> Option<String> {
-    Some("editor".to_string())
+    Some("terminal".to_string())
 }
 
 impl Settings {
@@ -174,6 +174,6 @@ mod tests {
         }"#;
         let s: Settings = serde_json::from_str(json).expect("old config should still parse");
         assert_eq!(s.open_targets.len(), 3);
-        assert_eq!(s.default_open_target.as_deref(), Some("editor"));
+        assert_eq!(s.default_open_target.as_deref(), Some("terminal"));
     }
 }
