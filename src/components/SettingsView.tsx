@@ -67,7 +67,7 @@ const COMMAND_GROUPS: { group: string; items: { action: string; cmd: string }[] 
       { action: "Switch / checkout", cmd: "git checkout <ref>" },
       { action: "New branch", cmd: "git branch <name> [<from>]" },
       { action: "Rename branch", cmd: "git branch -m <old> <new>" },
-      { action: "Delete branch", cmd: "git branch -d <name>" },
+      { action: "Delete branch", cmd: "git branch -d <name> (-D after confirming force)" },
     ],
   },
   {
@@ -76,8 +76,8 @@ const COMMAND_GROUPS: { group: string; items: { action: string; cmd: string }[] 
       { action: "Fetch", cmd: "git fetch --all --prune" },
       { action: "Pull", cmd: "git pull --ff-only" },
       { action: "Publish branch", cmd: "git push --set-upstream origin <branch>" },
-      { action: "Push", cmd: "git push origin <branch>" },
-      { action: "Force push", cmd: "git push --force-with-lease origin <branch>" },
+      { action: "Push", cmd: "git push <remote> <branch>:<upstream branch>" },
+      { action: "Force push", cmd: "git push --force-with-lease <remote> <branch>:<upstream branch>" },
     ],
   },
   {
