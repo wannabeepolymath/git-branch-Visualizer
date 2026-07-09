@@ -282,11 +282,13 @@ function DetailPanel({
 function WorkingChanges({
   repoId,
   refreshKey,
+  confirmActions,
   onToast,
   onChanged,
 }: {
   repoId: string;
   refreshKey: number;
+  confirmActions: boolean;
   onToast: (msg: string) => void;
   onChanged: () => void;
 }) {
@@ -331,6 +333,9 @@ function WorkingChanges({
       onToast(ok);
       onChanged();
     }).catch((e: unknown) => onToast(String(e)));
+
+  // Confirmation on → arm a tick/cross; off → run the action immediately.
+  const arm = (o: NonNullable<typeof pending>) => (confirmActions ? setPending(o) : o.run());
 
   const toggleDiff = (key: string, f: FileChange, isStaged: boolean) => {
     if (openDiff === key) {
@@ -389,7 +394,7 @@ function WorkingChanges({
         label="Unstage"
         title="Unstage"
         onClick={() =>
-          setPending({ id: key, label: "Unstage", run: () => act(unstageFiles(repoId, [f.path]), "Unstaged") })
+          arm({ id: key, label: "Unstage", run: () => act(unstageFiles(repoId, [f.path]), "Unstaged") })
         }
       />
     ) : (
@@ -398,7 +403,7 @@ function WorkingChanges({
           label="Stage"
           title="Stage"
           onClick={() =>
-            setPending({ id: key, label: "Stage", run: () => act(stageFiles(repoId, [f.path]), "Staged") })
+            arm({ id: key, label: "Stage", run: () => act(stageFiles(repoId, [f.path]), "Staged") })
           }
         />
         <ActBtn
@@ -406,7 +411,7 @@ function WorkingChanges({
           title="Discard changes"
           danger
           onClick={() =>
-            setPending({
+            arm({
               id: key,
               label: "Discard",
               danger: true,
@@ -439,7 +444,7 @@ function WorkingChanges({
       ) : (
         <button
           className="text-[10px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-          onClick={() => setPending({ id, label: allLabel, run: onAll })}
+          onClick={() => arm({ id, label: allLabel, run: onAll })}
         >
           {allLabel}
         </button>
@@ -502,6 +507,7 @@ export function CommitGraph({
   refs,
   pageSize,
   refreshKey,
+  confirmActions,
   onToast,
   onChanged,
 }: {
@@ -509,6 +515,7 @@ export function CommitGraph({
   refs: string[];
   pageSize: number;
   refreshKey: number;
+  confirmActions: boolean;
   onToast: (msg: string) => void;
   onChanged: () => void;
 }) {
@@ -708,6 +715,7 @@ export function CommitGraph({
       <WorkingChanges
         repoId={repoId}
         refreshKey={refreshKey}
+        confirmActions={confirmActions}
         onToast={onToast}
         onChanged={onChanged}
       />

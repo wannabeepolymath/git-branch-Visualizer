@@ -26,6 +26,14 @@ pub struct Settings {
     pub theme: String,
     pub commits_per_page: u32,
     pub show_remote_branches: bool,
+    /// Ask for tick/cross confirmation before codebase-affecting actions.
+    /// `serde(default)` keeps pre-existing config files loadable (defaults to on).
+    #[serde(default = "default_true")]
+    pub confirm_actions: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Settings {
@@ -38,6 +46,7 @@ impl Settings {
             theme: "system".to_string(),
             commits_per_page: 200,
             show_remote_branches: true,
+            confirm_actions: true,
         }
     }
 }
@@ -95,4 +104,22 @@ pub fn persist(path: &Path, settings: &Settings) -> Result<(), String> {
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
     std::fs::write(path, json).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_config_without_confirm_actions_loads_with_it_on() {
+        // A settings blob written before confirm_actions existed must still parse
+        // (not reset the user's settings) and default the new field to on.
+        let json = r#"{
+            "repos": [], "activeRepoId": null, "shortcut": "Alt+Shift+G",
+            "launchAtLogin": false, "theme": "system",
+            "commitsPerPage": 200, "showRemoteBranches": true
+        }"#;
+        let s: Settings = serde_json::from_str(json).expect("old config should still parse");
+        assert!(s.confirm_actions);
+    }
 }

@@ -161,6 +161,15 @@ export function SettingsView({
           />
           Launch at login
         </label>
+        <label className="flex h-8 items-center gap-2 px-3 text-[12px]">
+          <input
+            type="checkbox"
+            className="size-3.5 accent-blue-600"
+            checked={settings.confirmActions}
+            onChange={(e) => void patch({ confirmActions: e.target.checked })}
+          />
+          Confirm before staging, discarding, and other file actions
+        </label>
         <div className="flex items-center gap-2 px-3 py-1">
           <label className="text-[12px] text-neutral-600 dark:text-neutral-300" htmlFor="theme-select">
             Theme

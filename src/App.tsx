@@ -228,6 +228,7 @@ export default function App() {
             refs={selectedRefs}
             pageSize={settings.commitsPerPage > 0 ? settings.commitsPerPage : 200}
             refreshKey={refreshKey}
+            confirmActions={settings.confirmActions}
             onToast={show}
             onChanged={refresh}
           />

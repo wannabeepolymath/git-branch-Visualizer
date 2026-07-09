@@ -53,6 +53,7 @@ export interface Settings {
   theme: "system" | "light" | "dark";
   commitsPerPage: number;
   showRemoteBranches: boolean;
+  confirmActions: boolean;
 }
 
 export const getSettings = (): Promise<Settings> => invoke("get_settings");
