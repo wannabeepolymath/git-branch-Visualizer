@@ -77,6 +77,16 @@ export default function App() {
   const repoIdRef = useRef<string | null>(null);
   repoIdRef.current = repoId;
 
+  // Reset per-repo state during render (not in an effect) so no render ever pairs
+  // the new repoId with the previous repo's worktree — that stale pair makes the
+  // backend reject the worktree with "not a worktree of this repo".
+  const [prevRepoId, setPrevRepoId] = useState(repoId);
+  if (repoId !== prevRepoId) {
+    setPrevRepoId(repoId);
+    setSelectedRefs([]);
+    setFocusedWorktree(""); // re-defaults to the new repo's main worktree on next fetch
+  }
+
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   // The worktree the app acts on. Pass undefined when it's the main worktree so
@@ -113,11 +123,6 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
-
-  useEffect(() => {
-    setSelectedRefs([]);
-    setFocusedWorktree(""); // re-defaults to the new repo's main worktree on next fetch
-  }, [repoId]);
 
   useEffect(() => {
     if (!repoId) {
