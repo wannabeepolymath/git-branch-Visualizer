@@ -17,9 +17,12 @@ const MODIFIER_KEYS = new Set(["Control", "Alt", "Shift", "Meta"]);
 // Name + one-line blurb + a few representative colors (panel, edge, accent, lane)
 // for each theme's picker card. Kept in sync with the palettes in index.css.
 const THEME_META: Record<ThemeName, { label: string; blurb: string; swatch: [string, string, string, string] }> = {
-  graphite: { label: "Graphite", blurb: "Calm, dark, pro", swatch: ["#12141b", "#23262f", "#8b8cf6", "#48b4c4"] },
-  paper: { label: "Paper", blurb: "Light, roomy", swatch: ["#ffffff", "#e4e8e7", "#0f8a72", "#4f46e5"] },
+  midnight: { label: "Midnight", blurb: "Indigo-tinted dark", swatch: ["#12141b", "#23262f", "#8b8cf6", "#48b4c4"] },
+  obsidian: { label: "Obsidian", blurb: "True black, neutral", swatch: ["#0a0a0b", "#242429", "#e6e6ea", "#8a8a92"] },
+  onyx: { label: "Onyx", blurb: "Black, cool cyan", swatch: ["#07090c", "#1b232a", "#22d3ee", "#7fe9f5"] },
+  carbon: { label: "Carbon", blurb: "Black, warm amber", swatch: ["#0b0a08", "#272320", "#fbbf24", "#f4cf6b"] },
   terminal: { label: "Terminal", blurb: "Dark, mono", swatch: ["#0a0f0c", "#17271c", "#4ade80", "#22d3ee"] },
+  paper: { label: "Paper", blurb: "Light, roomy", swatch: ["#ffffff", "#e4e8e7", "#0f8a72", "#4f46e5"] },
 };
 
 /** Tauri global-shortcut plugin format: modifiers joined by "+", then the key. */

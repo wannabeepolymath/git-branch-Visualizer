@@ -32,9 +32,9 @@
   --color-tag-fg: var(--tag-fg);
 }
 
-/* ---- A · Graphite (also the default before App sets data-theme) ---- */
+/* ---- A · Midnight (indigo-tinted dark; also the default before App sets data-theme) ---- */
 :root,
-:root[data-theme="graphite"] {
+:root[data-theme="midnight"] {
   --bg: #0e1016;
   --panel: #12141b;
   --panel2: #171a22;
@@ -58,6 +58,105 @@
   --pill-fg: #a9aaf8;
   --tag-bg: rgba(251, 191, 36, 0.13);
   --tag-fg: #f4c14e;
+  --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+}
+
+/* ---- A2 · Obsidian (true black, neutral/monochrome accent) ---- */
+:root[data-theme="obsidian"] {
+  --bg: #000000;
+  --panel: #0a0a0b;
+  --panel2: #121214;
+  --edge: #242429;
+  --fg: #e6e6ea;
+  --muted: #8a8a92;
+  --faint: #55555d;
+  --accent: #e6e6ea;
+  --accent-soft: rgba(255, 255, 255, 0.10);
+  --accent-fg: #000000;
+  --hover: rgba(255, 255, 255, 0.045);
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --add: #4ade80;
+  --mod: #fbbf24;
+  --del: #f87171;
+  --ren: #c4a2f5;
+  --sel-bg: rgba(255, 255, 255, 0.09);
+  --sel-fg: #ffffff;
+  --pill-bg: rgba(255, 255, 255, 0.10);
+  --pill-fg: #d4d4d8;
+  --tag-bg: rgba(251, 191, 36, 0.13);
+  --tag-fg: #f4c14e;
+  --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+}
+
+/* ---- A3 · Onyx (near-black, cool cyan accent) ---- */
+:root[data-theme="onyx"] {
+  --bg: #000305;
+  --panel: #07090c;
+  --panel2: #0d1116;
+  --edge: #1b232a;
+  --fg: #dbe6ea;
+  --muted: #7e8f96;
+  --faint: #4d5a61;
+  --accent: #22d3ee;
+  --accent-soft: rgba(34, 211, 238, 0.12);
+  --accent-fg: #001014;
+  --hover: rgba(34, 211, 238, 0.05);
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --add: #4ade80;
+  --mod: #fbbf24;
+  --del: #f87171;
+  --ren: #c084fc;
+  --sel-bg: rgba(34, 211, 238, 0.10);
+  --sel-fg: #7fe9f5;
+  --pill-bg: rgba(34, 211, 238, 0.10);
+  --pill-fg: #67e8f9;
+  --tag-bg: rgba(251, 191, 36, 0.10);
+  --tag-fg: #fbbf24;
+  --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+}
+
+/* ---- A4 · Carbon (true black, warm amber accent) ---- */
+:root[data-theme="carbon"] {
+  --bg: #000000;
+  --panel: #0b0a08;
+  --panel2: #131210;
+  --edge: #272320;
+  --fg: #e8e4dc;
+  --muted: #8f887c;
+  --faint: #58534b;
+  --accent: #fbbf24;
+  --accent-soft: rgba(251, 191, 36, 0.12);
+  --accent-fg: #140f00;
+  --hover: rgba(251, 191, 36, 0.05);
+  --good: #4ade80;
+  --warn: #fb923c;
+  --add: #4ade80;
+  --mod: #fbbf24;
+  --del: #f87171;
+  --ren: #c4a2f5;
+  --sel-bg: rgba(251, 191, 36, 0.10);
+  --sel-fg: #f4cf6b;
+  --pill-bg: rgba(251, 191, 36, 0.12);
+  --pill-fg: #f4cf6b;
+  --tag-bg: rgba(196, 162, 245, 0.13);
+  --tag-fg: #c4a2f5;
   --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --radius-xs: 3px;
   --radius-sm: 4px;

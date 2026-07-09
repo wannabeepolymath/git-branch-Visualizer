@@ -109,7 +109,7 @@ export default function App() {
   }, [show]);
 
   // Theme: each visual identity is a full palette selected by `data-theme` on <html>.
-  const theme = normalizeTheme(settings?.theme ?? "graphite");
+  const theme = normalizeTheme(settings?.theme ?? "midnight");
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);

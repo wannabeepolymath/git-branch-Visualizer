@@ -56,12 +56,19 @@ export interface WorktreeInfo {
 }
 
 /** Visual identity. Each is a complete, self-contained look (see index.css). */
-export type ThemeName = "graphite" | "paper" | "terminal";
-export const THEME_NAMES: ThemeName[] = ["graphite", "paper", "terminal"];
+export type ThemeName = "midnight" | "obsidian" | "onyx" | "carbon" | "terminal" | "paper";
+export const THEME_NAMES: ThemeName[] = [
+  "midnight",
+  "obsidian",
+  "onyx",
+  "carbon",
+  "terminal",
+  "paper",
+];
 
-/** Map any stored value (incl. legacy "system"/"light"/"dark") to a real theme. */
+/** Map any stored value (incl. legacy "system"/"light"/"dark"/"graphite") to a real theme. */
 export function normalizeTheme(t: string): ThemeName {
-  return t === "paper" || t === "terminal" ? t : "graphite";
+  return THEME_NAMES.includes(t as ThemeName) ? (t as ThemeName) : "midnight";
 }
 
 /** A configurable "open worktree with…" action. `command` holds a {path} token. */

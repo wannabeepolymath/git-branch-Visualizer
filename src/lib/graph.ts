@@ -29,12 +29,15 @@ import type { ThemeName } from "./ipc";
 // can't read CSS vars, so the rail palette lives here and is threaded in as a
 // prop rather than tokenized in index.css.
 export const LANE_PALETTES: Record<ThemeName, readonly string[]> = {
-  graphite: ["#8b8cf6", "#48b4c4", "#e0a458", "#e07a9b", "#7bd88f", "#c4a2f5", "#5bb8e0", "#d9d06b"],
-  paper: ["#0f8a72", "#4f46e5", "#c2410c", "#dc2626", "#7c3aed", "#0891b2", "#b45309", "#be185d"],
+  midnight: ["#8b8cf6", "#48b4c4", "#e0a458", "#e07a9b", "#7bd88f", "#c4a2f5", "#5bb8e0", "#d9d06b"],
+  obsidian: ["#a5b4fc", "#5eead4", "#fcd34d", "#f9a8d4", "#86efac", "#c4b5fd", "#7dd3fc", "#fdba74"],
+  onyx: ["#22d3ee", "#818cf8", "#f472b6", "#5eead4", "#fbbf24", "#c084fc", "#60a5fa", "#34d399"],
+  carbon: ["#fbbf24", "#fb923c", "#f472b6", "#a3e635", "#c4a2f5", "#60a5fa", "#f87171", "#5eead4"],
   terminal: ["#4ade80", "#22d3ee", "#f472b6", "#fbbf24", "#a78bfa", "#fb923c", "#34d399", "#60a5fa"],
+  paper: ["#0f8a72", "#4f46e5", "#c2410c", "#dc2626", "#7c3aed", "#0891b2", "#b45309", "#be185d"],
 };
 
-export function laneColor(lane: number, theme: ThemeName = "graphite"): string {
+export function laneColor(lane: number, theme: ThemeName = "midnight"): string {
   const p = LANE_PALETTES[theme];
   return p[lane % p.length];
 }
