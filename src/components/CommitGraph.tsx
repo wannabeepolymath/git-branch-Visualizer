@@ -118,10 +118,12 @@ function statusColor(status: string): string {
 function FileRow({
   f,
   actions,
+  actionsVisible,
   onToggleDiff,
 }: {
   f: FileChange;
   actions?: ReactNode;
+  actionsVisible?: boolean; // keep actions shown even without hover (confirm armed)
   onToggleDiff?: () => void;
 }) {
   return (
@@ -142,7 +144,9 @@ function FileRow({
       </span>
       {actions && (
         <span
-          className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100"
+          className={`flex shrink-0 items-center gap-1 ${
+            actionsVisible ? "" : "opacity-0 group-hover:opacity-100"
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
           {actions}
@@ -160,7 +164,7 @@ function ActBtn({
 }: {
   label: string;
   title: string;
-  onClick: (e: MouseEvent) => void;
+  onClick: () => void;
   danger?: boolean;
 }) {
   return (
@@ -290,7 +294,14 @@ function WorkingChanges({
   const [open, setOpen] = useState(false);
   const [openDiff, setOpenDiff] = useState<string | null>(null); // "s:path" / "u:path"
   const [diffText, setDiffText] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<{ x: number; y: number; f: FileChange } | null>(null);
+  // A codebase-affecting action is armed and awaiting tick/cross confirmation.
+  // Only one at a time; `run` carries the intent, `label` names it, `danger` reddens the tick.
+  const [pending, setPending] = useState<{
+    id: string;
+    label: string;
+    run: () => void;
+    danger?: boolean;
+  } | null>(null);
   const openDiffRef = useRef<string | null>(null);
   openDiffRef.current = openDiff;
 
@@ -303,10 +314,12 @@ function WorkingChanges({
   useEffect(() => {
     load();
   }, [load, refreshKey]);
-  // A reload can move rows between sections; collapse any open diff so it can't go stale.
+  // A reload can move/remove rows; collapse any open diff and disarm any pending
+  // confirm so neither points at a now-stale row.
   useEffect(() => {
     setOpenDiff(null);
     setDiffText(null);
+    setPending(null);
   }, [status]);
 
   const staged = status?.staged ?? [];
@@ -334,48 +347,103 @@ function WorkingChanges({
       .catch((e: unknown) => onToast(String(e)));
   };
 
+  // Tick/cross that replaces an action's button(s) once armed.
+  const confirmUI = (p: NonNullable<typeof pending>) => (
+    <>
+      <span className="text-[10px] text-neutral-400">{p.label}?</span>
+      <button
+        title="Confirm"
+        onClick={(e) => {
+          e.stopPropagation();
+          setPending(null);
+          p.run();
+        }}
+        className={`rounded px-1 text-[11px] leading-[15px] ${
+          p.danger
+            ? "text-red-600 hover:bg-red-500/10 dark:text-red-400"
+            : "text-green-600 hover:bg-green-500/10 dark:text-green-500"
+        }`}
+      >
+        ✓
+      </button>
+      <button
+        title="Cancel"
+        onClick={(e) => {
+          e.stopPropagation();
+          setPending(null);
+        }}
+        className="rounded px-1 text-[11px] leading-[15px] text-neutral-500 hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-neutral-700"
+      >
+        ✕
+      </button>
+    </>
+  );
+
   const renderFile = (f: FileChange, isStaged: boolean) => {
     const key = `${isStaged ? "s" : "u"}:${f.path}`;
-    const actions = isStaged ? (
+    const armed = pending?.id === key;
+    const actions = armed ? (
+      confirmUI(pending)
+    ) : isStaged ? (
       <ActBtn
         label="Unstage"
         title="Unstage"
-        onClick={() => act(unstageFiles(repoId, [f.path]), "Unstaged")}
+        onClick={() =>
+          setPending({ id: key, label: "Unstage", run: () => act(unstageFiles(repoId, [f.path]), "Unstaged") })
+        }
       />
     ) : (
       <>
         <ActBtn
           label="Stage"
           title="Stage"
-          onClick={() => act(stageFiles(repoId, [f.path]), "Staged")}
+          onClick={() =>
+            setPending({ id: key, label: "Stage", run: () => act(stageFiles(repoId, [f.path]), "Staged") })
+          }
         />
         <ActBtn
           label="Discard"
           title="Discard changes"
           danger
-          onClick={(e) => setConfirm({ x: e.clientX, y: e.clientY, f })}
+          onClick={() =>
+            setPending({
+              id: key,
+              label: "Discard",
+              danger: true,
+              run: () => act(discardFiles(repoId, [f.path], f.status === "?"), "Discarded"),
+            })
+          }
         />
       </>
     );
     return (
       <div key={key}>
-        <FileRow f={f} actions={actions} onToggleDiff={() => toggleDiff(key, f, isStaged)} />
+        <FileRow
+          f={f}
+          actions={actions}
+          actionsVisible={armed}
+          onToggleDiff={() => toggleDiff(key, f, isStaged)}
+        />
         {openDiff === key && <DiffView text={diffText} />}
       </div>
     );
   };
 
-  const sectionHeader = (label: string, allLabel: string, onAll: () => void, mt: boolean) => (
-    <div className={`mb-0.5 flex items-center gap-2 ${mt ? "mt-2" : ""}`}>
+  const sectionHeader = (id: string, label: string, allLabel: string, onAll: () => void, mt: boolean) => (
+    <div className={`mb-0.5 flex items-center gap-1.5 ${mt ? "mt-2" : ""}`}>
       <span className="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
         {label}
       </span>
-      <button
-        className="text-[10px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-        onClick={onAll}
-      >
-        {allLabel}
-      </button>
+      {pending?.id === id ? (
+        confirmUI(pending)
+      ) : (
+        <button
+          className="text-[10px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+          onClick={() => setPending({ id, label: allLabel, run: onAll })}
+        >
+          {allLabel}
+        </button>
+      )}
     </div>
   );
 
@@ -402,6 +470,7 @@ function WorkingChanges({
           {staged.length > 0 && (
             <>
               {sectionHeader(
+                "all:staged",
                 "Staged",
                 "Unstage all",
                 () => act(unstageFiles(repoId, staged.map((f) => f.path)), "Unstaged all"),
@@ -413,6 +482,7 @@ function WorkingChanges({
           {unstaged.length > 0 && (
             <>
               {sectionHeader(
+                "all:unstaged",
                 "Unstaged",
                 "Stage all",
                 () => act(stageFiles(repoId, unstaged.map((f) => f.path)), "Staged all"),
@@ -422,21 +492,6 @@ function WorkingChanges({
             </>
           )}
         </div>
-      )}
-      {confirm && (
-        <PromptPopover
-          x={confirm.x}
-          y={confirm.y}
-          title={`Discard changes to ${confirm.f.path.split("/").pop()}?`}
-          danger
-          confirmLabel="Discard"
-          onConfirm={async () => {
-            await discardFiles(repoId, [confirm.f.path], confirm.f.status === "?");
-            onToast("Discarded");
-            onChanged();
-          }}
-          onClose={() => setConfirm(null)}
-        />
       )}
     </div>
   );
