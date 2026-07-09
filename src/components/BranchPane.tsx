@@ -91,6 +91,11 @@ export function BranchPane({
     localStorage.setItem("bv.navTab", t);
     setTab(t);
   };
+  // Only surface the Worktrees lens when there's more than the main worktree to
+  // navigate between; with one, the tab is just noise. Fall back to branches even
+  // if "worktrees" was the last-used tab.
+  const showWorktreeToggle = worktrees.length > 1;
+  const activeTab = showWorktreeToggle && tab === "worktrees" ? "worktrees" : "branches";
   const [filter, setFilter] = useState("");
   const [openLocal, setOpenLocal] = useState(true);
   const [openRemote, setOpenRemote] = useState(showRemoteDefault);
@@ -205,31 +210,33 @@ export function BranchPane({
   return (
     <div className="flex w-full min-w-0 flex-col border-r border-edge">
       <div className="flex flex-col gap-1.5 p-1.5">
-        <div className="flex rounded border border-edge bg-panel2 p-0.5 text-[11px] font-medium">
-          {(["branches", "worktrees"] as const).map((t) => (
-            <button
-              key={t}
-              className={`flex flex-1 items-center justify-center gap-1 rounded px-2 py-0.5 capitalize ${
-                tab === t ? "bg-accent text-accent-fg" : "text-muted hover:text-fg"
-              }`}
-              onClick={() => selectTab(t)}
-            >
-              {t}
-              {t === "worktrees" && worktrees.length > 0 && (
-                <span className="tabular-nums opacity-70">{worktrees.length}</span>
-              )}
-            </button>
-          ))}
-        </div>
+        {showWorktreeToggle && (
+          <div className="flex rounded border border-edge bg-panel2 p-0.5 text-[11px] font-medium">
+            {(["branches", "worktrees"] as const).map((t) => (
+              <button
+                key={t}
+                className={`flex flex-1 items-center justify-center gap-1 rounded px-2 py-0.5 capitalize ${
+                  tab === t ? "bg-accent text-accent-fg" : "text-muted hover:text-fg"
+                }`}
+                onClick={() => selectTab(t)}
+              >
+                {t}
+                {t === "worktrees" && (
+                  <span className="tabular-nums opacity-70">{worktrees.length}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder={tab === "worktrees" ? "Filter worktrees…" : "Filter branches…"}
+          placeholder={activeTab === "worktrees" ? "Filter worktrees…" : "Filter branches…"}
           className="w-full rounded border border-edge bg-panel2 px-2 py-1 text-[12px] outline-none placeholder:text-faint focus:border-accent"
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
-        {tab === "worktrees" ? (
+        {activeTab === "worktrees" ? (
           <WorktreePane
             repoId={repoId}
             worktrees={worktrees}
