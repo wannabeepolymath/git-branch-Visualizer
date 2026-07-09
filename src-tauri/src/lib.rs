@@ -57,6 +57,7 @@ pub fn run() {
             commands::remove_repo,
             commands::set_active_repo,
             commands::get_branches,
+            commands::get_worktrees,
             commands::get_log,
             commands::get_commit,
             commands::get_status,

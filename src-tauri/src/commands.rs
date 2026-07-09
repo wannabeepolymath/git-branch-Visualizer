@@ -187,6 +187,15 @@ pub async fn get_branches(
 }
 
 #[tauri::command]
+pub async fn get_worktrees(
+    state: State<'_, AppState>,
+    repo_id: String,
+) -> Result<Vec<git::WorktreeInfo>, String> {
+    let path = state.repo_path(&repo_id)?;
+    git::get_worktrees(&path)
+}
+
+#[tauri::command]
 pub async fn get_log(
     state: State<'_, AppState>,
     repo_id: String,

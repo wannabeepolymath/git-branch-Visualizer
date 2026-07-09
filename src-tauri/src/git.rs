@@ -53,6 +53,21 @@ pub struct WorkingStatus {
     pub unstaged: Vec<FileChange>,
 }
 
+/// One entry from `git worktree list`. `branch` is None for a detached HEAD (or a
+/// bare main worktree). `ahead`/`behind` are intentionally absent — the frontend
+/// joins them from the branch list by branch name (no extra git cost).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeInfo {
+    pub path: String,
+    pub branch: Option<String>,
+    pub head: String, // full SHA; frontend shortens for detached display
+    pub is_main: bool,
+    pub dirty: bool,
+    pub locked: bool,
+    pub prunable: bool,
+}
+
 /// Run git in `repo` with locks disabled and terminal prompts suppressed.
 /// Returns stdout on success, trimmed stderr as the error otherwise.
 /// `allow_one` also accepts exit status 1 (used by `git diff --no-index`,
@@ -209,7 +224,85 @@ pub fn parse_status_porcelain(out: &str) -> WorkingStatus {
     WorkingStatus { staged, unstaged }
 }
 
+/// Parse `git worktree list --porcelain` into records. Records are separated by a
+/// blank line; the first record is the main worktree. `dirty` is left false here —
+/// it needs a per-worktree git call, filled in by `get_worktrees`.
+pub fn parse_worktree_list(out: &str) -> Vec<WorktreeInfo> {
+    let mut result = Vec::new();
+    let mut cur: Option<WorktreeInfo> = None;
+    let flush = |cur: &mut Option<WorktreeInfo>, result: &mut Vec<WorktreeInfo>| {
+        if let Some(w) = cur.take() {
+            result.push(w);
+        }
+    };
+    for line in out.lines() {
+        if line.is_empty() {
+            flush(&mut cur, &mut result);
+            continue;
+        }
+        let (key, val) = line.split_once(' ').unwrap_or((line, ""));
+        match key {
+            "worktree" => {
+                flush(&mut cur, &mut result); // defensive: records are blank-separated
+                cur = Some(WorktreeInfo {
+                    path: val.to_string(),
+                    branch: None,
+                    head: String::new(),
+                    is_main: result.is_empty(), // main worktree is listed first
+                    dirty: false,
+                    locked: false,
+                    prunable: false,
+                });
+            }
+            "HEAD" => {
+                if let Some(w) = cur.as_mut() {
+                    w.head = val.to_string();
+                }
+            }
+            "branch" => {
+                if let Some(w) = cur.as_mut() {
+                    w.branch = Some(val.strip_prefix("refs/heads/").unwrap_or(val).to_string());
+                }
+            }
+            "locked" => {
+                if let Some(w) = cur.as_mut() {
+                    w.locked = true;
+                }
+            }
+            "prunable" => {
+                if let Some(w) = cur.as_mut() {
+                    w.prunable = true;
+                }
+            }
+            _ => {} // "detached", "bare" — branch stays None
+        }
+    }
+    flush(&mut cur, &mut result);
+    result
+}
+
 // ---- git invocations ----
+
+/// List the repository's worktrees, each tagged with a cheap dirty flag.
+pub fn get_worktrees(repo: &str) -> Result<Vec<WorktreeInfo>, String> {
+    let out = git(repo, &["worktree", "list", "--porcelain"])?;
+    let mut worktrees = parse_worktree_list(&out);
+    for w in worktrees.iter_mut() {
+        if !w.head.is_empty() {
+            // bare worktrees have no HEAD/working tree
+            w.dirty = is_dirty(&w.path);
+        }
+    }
+    Ok(worktrees)
+}
+
+/// True if the worktree at `path` has any staged or unstaged change. Best-effort:
+/// a stale/unreadable path reports clean rather than erroring the whole listing.
+fn is_dirty(path: &str) -> bool {
+    git(path, &["status", "--porcelain", "--untracked-files=all"])
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+}
 
 pub fn get_branches(repo: &str, include_remotes: bool) -> Result<Vec<BranchInfo>, String> {
     let mut out = Vec::new();
@@ -475,5 +568,38 @@ mod tests {
         let c = parse_log_line(line).unwrap();
         assert!(c.parents.is_empty());
         assert!(c.refs.is_empty());
+    }
+
+    #[test]
+    fn worktree_list_parses_records() {
+        // main (on branch) + linked branch + detached + locked, blank-separated,
+        // with the trailing blank line git emits after the last record.
+        let out = "worktree /repo/main\nHEAD aaaa1111\nbranch refs/heads/main\n\nworktree /repo/wt-feature\nHEAD bbbb2222\nbranch refs/heads/feature/x\n\nworktree /repo/wt-detached\nHEAD cccc3333\ndetached\n\nworktree /repo/wt-locked\nHEAD dddd4444\nbranch refs/heads/wip\nlocked being tested\n\n";
+        let ws = parse_worktree_list(out);
+        assert_eq!(ws.len(), 4);
+
+        assert_eq!(ws[0].path, "/repo/main");
+        assert_eq!(ws[0].branch.as_deref(), Some("main"));
+        assert_eq!(ws[0].head, "aaaa1111");
+        assert!(ws[0].is_main);
+        assert!(!ws[0].locked);
+
+        assert_eq!(ws[1].branch.as_deref(), Some("feature/x")); // refs/heads/ stripped
+        assert!(!ws[1].is_main);
+
+        assert_eq!(ws[2].path, "/repo/wt-detached");
+        assert_eq!(ws[2].branch, None); // detached HEAD
+        assert_eq!(ws[2].head, "cccc3333");
+
+        assert_eq!(ws[3].branch.as_deref(), Some("wip"));
+        assert!(ws[3].locked);
+    }
+
+    #[test]
+    fn worktree_list_handles_no_trailing_blank() {
+        let out = "worktree /repo/only\nHEAD abcd\nbranch refs/heads/main";
+        let ws = parse_worktree_list(out);
+        assert_eq!(ws.len(), 1);
+        assert!(ws[0].is_main);
     }
 }
