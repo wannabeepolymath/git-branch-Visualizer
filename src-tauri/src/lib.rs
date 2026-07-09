@@ -64,6 +64,7 @@ pub fn run() {
             commands::get_commit,
             commands::get_status,
             commands::diff_file,
+            commands::diff_commit_file,
             commands::stage_files,
             commands::unstage_files,
             commands::discard_files,

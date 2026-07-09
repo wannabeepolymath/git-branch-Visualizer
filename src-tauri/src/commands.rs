@@ -261,6 +261,17 @@ pub async fn get_commit(
 }
 
 #[tauri::command]
+pub async fn diff_commit_file(
+    state: State<'_, AppState>,
+    repo_id: String,
+    hash: String,
+    path: String,
+) -> Result<String, String> {
+    let repo = state.repo_path(&repo_id)?;
+    git::diff_commit_file(&repo, &hash, &path)
+}
+
+#[tauri::command]
 pub async fn get_status(
     state: State<'_, AppState>,
     repo_id: String,

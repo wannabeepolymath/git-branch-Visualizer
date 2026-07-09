@@ -365,7 +365,13 @@ pub fn get_commit(repo: &str, hash: &str) -> Result<CommitDetail, String> {
     let body = f[7].trim_end().to_string();
 
     // Separate call keeps file parsing simple (no interleaving with the format).
-    let names = git(repo, &["show", "--name-status", "--format=", hash])?;
+    // --diff-merges=first-parent: plain `git show` uses the combined diff for
+    // merges, which lists (almost) no files; the diff vs the first parent is
+    // what the detail panel should show. No effect on non-merge commits.
+    let names = git(
+        repo,
+        &["show", "--name-status", "--diff-merges=first-parent", "--format=", hash],
+    )?;
     let files = names
         .lines()
         .filter(|l| !l.trim().is_empty())
@@ -405,6 +411,16 @@ pub fn diff_file(repo: &str, path: &str, staged: bool, untracked: bool) -> Resul
     args.push("--");
     args.push(path);
     git(repo, &args)
+}
+
+/// Unified diff for one path as changed by a commit (vs its first parent).
+/// `git show` handles root commits (no parent) for free; first-parent keeps
+/// merge diffs consistent with the file list from `get_commit`.
+pub fn diff_commit_file(repo: &str, hash: &str, path: &str) -> Result<String, String> {
+    git(
+        repo,
+        &["show", "--format=", "--diff-merges=first-parent", hash, "--", path],
+    )
 }
 
 /// Build `[cmd..., "--", paths...]` — the `--` stops paths being read as flags.
