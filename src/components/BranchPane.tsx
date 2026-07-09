@@ -27,7 +27,7 @@ function Group({
   return (
     <div>
       <button
-        className="flex w-full items-center gap-1 px-2 py-1 text-[10px] font-semibold tracking-wider text-neutral-400 uppercase hover:text-neutral-600 dark:hover:text-neutral-300"
+        className="flex w-full items-center gap-1 px-2 py-1 text-[10px] font-semibold tracking-wider text-faint uppercase hover:text-muted"
         onClick={onToggle}
       >
         <svg
@@ -138,23 +138,23 @@ export function BranchPane({
         role="button"
         className={`flex h-7 cursor-default items-center gap-1.5 px-2 text-[12px] ${
           selected
-            ? "bg-blue-500/10 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300"
-            : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            ? "bg-sel text-sel-fg"
+            : "hover:bg-hover"
         }`}
         title={b.lastCommitSubject}
         onClick={(e) => onSelect(b.name, e.metaKey || e.ctrlKey)}
         onContextMenu={(e) => openMenu(e, b)}
       >
-        {b.isCurrent && <span className="size-1.5 shrink-0 rounded-full bg-green-500" />}
+        {b.isCurrent && <span className="size-1.5 shrink-0 rounded-full bg-good" />}
         <span className="min-w-0 flex-1 truncate">{b.name}</span>
         {(b.ahead > 0 || b.behind > 0) && (
-          <span className="shrink-0 text-[10px] text-neutral-400 tabular-nums">
+          <span className="shrink-0 text-[10px] text-faint tabular-nums">
             {b.ahead > 0 ? `↑${b.ahead}` : ""}
             {b.ahead > 0 && b.behind > 0 ? " " : ""}
             {b.behind > 0 ? `↓${b.behind}` : ""}
           </span>
         )}
-        <span className="shrink-0 text-[10px] whitespace-nowrap text-neutral-400 tabular-nums">
+        <span className="shrink-0 text-[10px] whitespace-nowrap text-faint tabular-nums">
           {relTime(b.lastCommitTime)}
         </span>
       </div>
@@ -162,13 +162,13 @@ export function BranchPane({
   };
 
   return (
-    <div className="flex w-full min-w-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
+    <div className="flex w-full min-w-0 flex-col border-r border-edge">
       <div className="p-1.5">
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter branches…"
-          className="w-full rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-[12px] outline-none placeholder:text-neutral-400 focus:border-blue-500 dark:border-neutral-700 dark:bg-neutral-800/60"
+          className="w-full rounded border border-edge bg-panel2 px-2 py-1 text-[12px] outline-none placeholder:text-faint focus:border-accent"
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
@@ -176,8 +176,8 @@ export function BranchPane({
           role="button"
           className={`flex h-7 cursor-default items-center px-2 text-[12px] ${
             selectedRefs.length === 0
-              ? "bg-blue-500/10 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300"
-              : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              ? "bg-sel text-sel-fg"
+              : "hover:bg-hover"
           }`}
           onClick={() => onSelect(null, false)}
         >
@@ -186,7 +186,7 @@ export function BranchPane({
 
         {current.length > 0 && (
           <>
-            <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-neutral-400 uppercase">
+            <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-faint uppercase">
               Current
             </div>
             {current.map(row)}
@@ -195,7 +195,7 @@ export function BranchPane({
 
         <Group label="Local" count={local.length} open={openLocal} onToggle={() => setOpenLocal((o) => !o)}>
           {local.length === 0 ? (
-            <div className="px-2 py-1 text-[11px] text-neutral-400">
+            <div className="px-2 py-1 text-[11px] text-faint">
               {f ? "No matches" : "No local branches"}
             </div>
           ) : (
@@ -210,7 +210,7 @@ export function BranchPane({
           onToggle={() => setOpenRemote((o) => !o)}
         >
           {remote.length === 0 ? (
-            <div className="px-2 py-1 text-[11px] text-neutral-400">
+            <div className="px-2 py-1 text-[11px] text-faint">
               {f ? "No matches" : "No remote branches"}
             </div>
           ) : (

@@ -21,6 +21,7 @@ import {
   type CommitDetail,
   type CommitInfo,
   type FileChange,
+  type ThemeName,
   type WorkingStatus,
 } from "../lib/ipc";
 import { laneColor, layoutGraph, type GraphRow } from "../lib/graph";
@@ -37,59 +38,74 @@ function railX(lane: number): number {
   return 6 + lane * LANE_W;
 }
 
-function Rail({ row, railW }: { row: GraphRow; railW: number }) {
+function Rail({ row, railW, theme }: { row: GraphRow; railW: number; theme: ThemeName }) {
   const cx = railX(row.lane);
   const cy = ROW_H / 2;
   const paths: ReactNode[] = [];
   for (const j of row.passes) {
-    paths.push(<path key={`p${j}`} d={`M ${railX(j)} 0 V ${ROW_H}`} stroke={laneColor(j)} />);
+    paths.push(<path key={`p${j}`} d={`M ${railX(j)} 0 V ${ROW_H}`} stroke={laneColor(j, theme)} />);
   }
   for (const j of row.ins) {
     const d =
       j === row.lane
         ? `M ${cx} 0 V ${cy}`
         : `M ${railX(j)} 0 Q ${railX(j)} ${cy} ${cx} ${cy}`;
-    paths.push(<path key={`i${j}`} d={d} stroke={laneColor(j)} />);
+    paths.push(<path key={`i${j}`} d={d} stroke={laneColor(j, theme)} />);
   }
   for (const j of row.outs) {
     const d =
       j === row.lane
         ? `M ${cx} ${cy} V ${ROW_H}`
         : `M ${cx} ${cy} Q ${railX(j)} ${cy} ${railX(j)} ${ROW_H}`;
-    paths.push(<path key={`o${j}`} d={d} stroke={laneColor(j)} />);
+    paths.push(<path key={`o${j}`} d={d} stroke={laneColor(j, theme)} />);
   }
   const isMerge = row.outs.length > 1;
+  const c = laneColor(row.lane, theme);
+  // Terminal reads as a TUI: square nodes with a faint neon glow.
+  const glow = theme === "terminal" ? { filter: `drop-shadow(0 0 1.8px ${c})` } : undefined;
+  const node =
+    theme === "terminal" ? (
+      isMerge ? (
+        <rect x={cx - 3} y={cy - 3} width={6} height={6} strokeWidth={1.6} stroke={c} className="fill-surface" style={glow} />
+      ) : (
+        <rect x={cx - 3} y={cy - 3} width={6} height={6} fill={c} style={glow} />
+      )
+    ) : isMerge ? (
+      <circle cx={cx} cy={cy} r={3} strokeWidth={1.5} stroke={c} className="fill-surface" />
+    ) : (
+      <circle cx={cx} cy={cy} r={3} fill={c} />
+    );
   return (
     <svg width={railW} height={ROW_H} className="shrink-0 overflow-hidden">
       <g fill="none" strokeWidth={1.5}>
         {paths}
       </g>
-      {isMerge ? (
-        <circle
-          cx={cx}
-          cy={cy}
-          r={3}
-          strokeWidth={1.5}
-          stroke={laneColor(row.lane)}
-          className="fill-white dark:fill-neutral-900"
-        />
-      ) : (
-        <circle cx={cx} cy={cy} r={3} fill={laneColor(row.lane)} />
-      )}
+      {node}
     </svg>
   );
 }
 
-function RefPill({ r }: { r: string }) {
+function RefPill({ r, theme }: { r: string; theme: ThemeName }) {
   const isTag = r.startsWith("tag:");
   const label = isTag ? r.slice(4) : r;
+  // Terminal drops the pill chrome for bracketed tags — [branch] / <tag>.
+  if (theme === "terminal") {
+    return (
+      <span
+        title={label}
+        className={`max-w-[110px] shrink-0 truncate font-mono text-[9.5px] leading-[14px] font-semibold ${
+          isTag ? "text-tag-fg" : "text-pill-fg"
+        }`}
+      >
+        {isTag ? `<${label}>` : `[${label}]`}
+      </span>
+    );
+  }
   return (
     <span
       title={label}
       className={`max-w-[76px] shrink-0 truncate rounded-sm px-1 text-[9px] leading-[14px] font-medium ${
-        isTag
-          ? "bg-amber-500/15 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400"
-          : "bg-blue-500/15 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300"
+        isTag ? "bg-tag text-tag-fg" : "bg-pill text-pill-fg"
       }`}
     >
       {label}
@@ -100,18 +116,18 @@ function RefPill({ r }: { r: string }) {
 function statusColor(status: string): string {
   switch (status.charAt(0)) {
     case "A":
-      return "text-green-600 dark:text-green-500";
+      return "text-add";
     case "D":
-      return "text-red-600 dark:text-red-500";
+      return "text-del";
     case "M":
-      return "text-amber-600 dark:text-amber-500";
+      return "text-mod";
     case "R":
     case "C":
-      return "text-purple-600 dark:text-purple-400";
+      return "text-ren";
     case "?":
-      return "text-green-600 dark:text-green-500"; // untracked (new file)
+      return "text-add"; // untracked (new file)
     default:
-      return "text-neutral-500";
+      return "text-muted";
   }
 }
 
@@ -136,10 +152,7 @@ function FileRow({
       <span className={`w-3 shrink-0 text-center font-mono font-semibold ${statusColor(f.status)}`}>
         {f.status.charAt(0)}
       </span>
-      <span
-        className="min-w-0 flex-1 truncate text-neutral-600 dark:text-neutral-300"
-        title={f.path}
-      >
+      <span className="min-w-0 flex-1 truncate text-muted" title={f.path}>
         {f.path}
       </span>
       {actions && (
@@ -172,9 +185,7 @@ function ActBtn({
       title={title}
       onClick={onClick}
       className={`rounded px-1 text-[10px] leading-[15px] ${
-        danger
-          ? "text-red-600 hover:bg-red-500/10 dark:text-red-400"
-          : "text-neutral-500 hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-neutral-700"
+        danger ? "text-del hover:bg-del/10" : "text-muted hover:bg-hover"
       }`}
     >
       {label}
@@ -183,33 +194,33 @@ function ActBtn({
 }
 
 function diffLineClass(ln: string): string {
-  if (ln.startsWith("@@")) return "text-cyan-600 dark:text-cyan-400";
-  if (ln.startsWith("+++") || ln.startsWith("---")) return "text-neutral-400";
+  if (ln.startsWith("@@")) return "text-accent";
+  if (ln.startsWith("+++") || ln.startsWith("---")) return "text-faint";
   if (/^(diff |index |new file|deleted file|rename |similarity |Binary )/.test(ln))
-    return "text-neutral-400";
-  if (ln.startsWith("+")) return "text-green-600 dark:text-green-400";
-  if (ln.startsWith("-")) return "text-red-600 dark:text-red-400";
-  return "text-neutral-600 dark:text-neutral-400";
+    return "text-faint";
+  if (ln.startsWith("+")) return "text-add";
+  if (ln.startsWith("-")) return "text-del";
+  return "text-muted";
 }
 
 const DIFF_CAP = 600; // lines rendered before truncation
 
 function DiffView({ text }: { text: string | null }) {
   if (text === null)
-    return <div className="py-1 pl-5 text-[11px] text-neutral-400">Loading diff…</div>;
+    return <div className="py-1 pl-5 text-[11px] text-faint">Loading diff…</div>;
   if (text.trim() === "")
-    return <div className="py-1 pl-5 text-[11px] text-neutral-400">No textual changes</div>;
+    return <div className="py-1 pl-5 text-[11px] text-faint">No textual changes</div>;
   const lines = text.split("\n");
   const shown = lines.slice(0, DIFF_CAP);
   return (
-    <pre className="mt-0.5 mb-1 ml-5 overflow-x-auto rounded border border-neutral-200 bg-white px-2 py-1 font-mono text-[10.5px] leading-[15px] select-text dark:border-neutral-700 dark:bg-neutral-900">
+    <pre className="mt-0.5 mb-1 ml-5 overflow-x-auto rounded border border-edge bg-surface px-2 py-1 font-mono text-[10.5px] leading-[15px] select-text">
       {shown.map((ln, i) => (
         <div key={i} className={diffLineClass(ln)}>
           {ln || " "}
         </div>
       ))}
       {lines.length > DIFF_CAP && (
-        <div className="text-neutral-400">… diff truncated ({lines.length - DIFF_CAP} more lines)</div>
+        <div className="text-faint">… diff truncated ({lines.length - DIFF_CAP} more lines)</div>
       )}
     </pre>
   );
@@ -226,20 +237,20 @@ function DetailPanel({
 }) {
   return (
     <div
-      className="absolute inset-x-0 z-10 overflow-y-auto border-y border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-700/70 dark:bg-neutral-800/60"
+      className="absolute inset-x-0 z-10 overflow-y-auto border-y border-edge bg-panel2 px-3 py-2"
       style={{ top, height: DETAIL_H }}
       onContextMenu={(e) => e.stopPropagation()}
     >
       {!detail ? (
-        <div className="text-[11px] text-neutral-400">Loading…</div>
+        <div className="text-[11px] text-faint">Loading…</div>
       ) : (
         <>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] text-neutral-500 select-text">
+            <span className="font-mono text-[11px] text-muted select-text">
               {detail.hash.slice(0, 12)}
             </span>
             <button
-              className="rounded border border-neutral-300 px-1.5 text-[10px] leading-[16px] text-neutral-500 hover:bg-neutral-100 dark:border-neutral-600 dark:hover:bg-neutral-700"
+              className="rounded border border-edge px-1.5 text-[10px] leading-[16px] text-muted hover:bg-hover"
               onClick={() => {
                 void navigator.clipboard.writeText(detail.hash);
                 onToast("Hash copied");
@@ -250,18 +261,18 @@ function DetailPanel({
           </div>
           <div className="mt-1.5 text-[12px] font-medium select-text">{detail.subject}</div>
           {detail.body.trim() !== "" && (
-            <pre className="mt-1 font-sans text-[11.5px] whitespace-pre-wrap text-neutral-600 select-text dark:text-neutral-400">
+            <pre className="mt-1 font-sans text-[11.5px] whitespace-pre-wrap text-muted select-text">
               {detail.body.trim()}
             </pre>
           )}
-          <div className="mt-1.5 text-[11px] text-neutral-500 select-text">
+          <div className="mt-1.5 text-[11px] text-muted select-text">
             {`${detail.authorName} <${detail.authorEmail}>`}
-            <span className="mx-1 text-neutral-300 dark:text-neutral-600">·</span>
+            <span className="mx-1 text-faint">·</span>
             {new Date(detail.timestamp * 1000).toLocaleString()}
           </div>
-          <div className="mt-2 border-t border-neutral-200 pt-1.5 dark:border-neutral-700/70">
+          <div className="mt-2 border-t border-edge pt-1.5">
             {detail.files.length === 0 ? (
-              <div className="text-[11px] text-neutral-400">No files changed</div>
+              <div className="text-[11px] text-faint">No files changed</div>
             ) : (
               detail.files.map((f) => <FileRow key={f.path} f={f} />)
             )}
@@ -355,7 +366,7 @@ function WorkingChanges({
   // Tick/cross that replaces an action's button(s) once armed.
   const confirmUI = (p: NonNullable<typeof pending>) => (
     <>
-      <span className="text-[10px] text-neutral-400">{p.label}?</span>
+      <span className="text-[10px] text-faint">{p.label}?</span>
       <button
         title="Confirm"
         onClick={(e) => {
@@ -364,9 +375,7 @@ function WorkingChanges({
           p.run();
         }}
         className={`rounded px-1 text-[11px] leading-[15px] ${
-          p.danger
-            ? "text-red-600 hover:bg-red-500/10 dark:text-red-400"
-            : "text-green-600 hover:bg-green-500/10 dark:text-green-500"
+          p.danger ? "text-del hover:bg-del/10" : "text-good hover:bg-good/10"
         }`}
       >
         ✓
@@ -377,7 +386,7 @@ function WorkingChanges({
           e.stopPropagation();
           setPending(null);
         }}
-        className="rounded px-1 text-[11px] leading-[15px] text-neutral-500 hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-neutral-700"
+        className="rounded px-1 text-[11px] leading-[15px] text-muted hover:bg-hover"
       >
         ✕
       </button>
@@ -436,14 +445,14 @@ function WorkingChanges({
 
   const sectionHeader = (id: string, label: string, allLabel: string, onAll: () => void, mt: boolean) => (
     <div className={`mb-0.5 flex items-center gap-1.5 ${mt ? "mt-2" : ""}`}>
-      <span className="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+      <span className="text-[10px] font-semibold tracking-wide text-faint uppercase">
         {label}
       </span>
       {pending?.id === id ? (
         confirmUI(pending)
       ) : (
         <button
-          className="text-[10px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+          className="text-[10px] text-faint hover:text-fg"
           onClick={() => arm({ id, label: allLabel, run: onAll })}
         >
           {allLabel}
@@ -453,15 +462,15 @@ function WorkingChanges({
   );
 
   return (
-    <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700/70">
+    <div className="shrink-0 border-b border-edge">
       <button
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800/70"
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-hover"
         onClick={() => setOpen((v) => (v ? false : (load(), true)))}
       >
-        <span className="w-2 shrink-0 text-[9px] text-neutral-400">{open ? "▾" : "▸"}</span>
-        <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+        <span className="w-2 shrink-0 text-[9px] text-faint">{open ? "▾" : "▸"}</span>
+        <span className="h-2 w-2 shrink-0 rounded-full bg-warn" />
         <span className="text-[12px] font-medium">Uncommitted changes</span>
-        <span className="text-[11px] text-neutral-400">
+        <span className="text-[11px] text-faint">
           {[
             staged.length > 0 ? `${staged.length} staged` : null,
             unstaged.length > 0 ? `${unstaged.length} unstaged` : null,
@@ -471,7 +480,7 @@ function WorkingChanges({
         </span>
       </button>
       {open && (
-        <div className="max-h-[360px] overflow-y-auto border-t border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-700/70 dark:bg-neutral-800/60">
+        <div className="max-h-[360px] overflow-y-auto border-t border-edge bg-panel2 px-3 py-2">
           {staged.length > 0 && (
             <>
               {sectionHeader(
@@ -508,6 +517,7 @@ export function CommitGraph({
   pageSize,
   refreshKey,
   confirmActions,
+  theme,
   onToast,
   onChanged,
 }: {
@@ -516,6 +526,7 @@ export function CommitGraph({
   pageSize: number;
   refreshKey: number;
   confirmActions: boolean;
+  theme: ThemeName;
   onToast: (msg: string) => void;
   onChanged: () => void;
 }) {
@@ -680,30 +691,28 @@ export function CommitGraph({
       <div
         key={c.hash}
         className={`absolute inset-x-0 flex cursor-default items-center gap-1.5 pr-2 ${
-          isExpanded
-            ? "bg-blue-500/10 dark:bg-blue-400/10"
-            : "hover:bg-neutral-100 dark:hover:bg-neutral-800/70"
+          isExpanded ? "bg-sel" : "hover:bg-hover"
         }`}
         style={{ top: rowTop(i), height: ROW_H }}
         onClick={() => toggleExpand(c)}
         onContextMenu={(e) => openMenu(e, c)}
       >
-        <Rail row={row} railW={railW} />
+        <Rail row={row} railW={railW} theme={theme} />
         <span className="min-w-0 flex-1 truncate text-[12px]" title={c.subject}>
           {c.subject}
         </span>
         {pills.map((r) => (
-          <RefPill key={r} r={r} />
+          <RefPill key={r} r={r} theme={theme} />
         ))}
         {extraPills > 0 && (
-          <span className="shrink-0 rounded-sm bg-neutral-500/10 px-1 text-[9px] leading-[14px] text-neutral-500">
+          <span className="shrink-0 rounded-sm bg-panel2 px-1 text-[9px] leading-[14px] text-faint">
             +{extraPills}
           </span>
         )}
-        <span className="shrink-0 font-mono text-[10px] text-neutral-400 tabular-nums">
+        <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
           {c.hash.slice(0, 7)}
         </span>
-        <span className="w-[26px] shrink-0 text-right text-[10px] whitespace-nowrap text-neutral-400 tabular-nums">
+        <span className="w-[26px] shrink-0 text-right text-[10px] whitespace-nowrap text-faint tabular-nums">
           {relTime(c.timestamp)}
         </span>
       </div>,
@@ -723,7 +732,7 @@ export function CommitGraph({
       {/* Container stays mounted across empty/loading states so the ResizeObserver keeps tracking. */}
       <div ref={containerRef} className="h-full overflow-y-auto" onScroll={onScroll}>
         {commits.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-[12px] text-neutral-400">
+          <div className="flex h-full items-center justify-center text-[12px] text-faint">
             {loading ? "Loading commits…" : "No commits"}
           </div>
         ) : (
@@ -734,7 +743,7 @@ export function CommitGraph({
             )}
             {!done && (
               <div
-                className="absolute inset-x-0 flex items-center justify-center text-[11px] text-neutral-400"
+                className="absolute inset-x-0 flex items-center justify-center text-[11px] text-faint"
                 style={{ top: totalH - ROW_H, height: ROW_H }}
               >
                 Loading more…

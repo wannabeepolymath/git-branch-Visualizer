@@ -56,7 +56,7 @@ function Popup({
   return (
     <div
       ref={ref}
-      className="fixed z-50 rounded-md border border-neutral-200 bg-white shadow-xl shadow-black/10 dark:border-neutral-700 dark:bg-neutral-800 dark:shadow-black/40"
+      className="fixed z-50 rounded-md border border-edge bg-panel shadow-xl shadow-black/20"
       style={{ left, top, width: w }}
     >
       {children}
@@ -81,8 +81,8 @@ export function ContextMenu({
         {items.map((it) => (
           <button
             key={it.label}
-            className={`block w-full px-3 py-1 text-left text-[12px] hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
-              it.danger ? "text-red-600 dark:text-red-400" : "text-neutral-800 dark:text-neutral-200"
+            className={`block w-full px-3 py-1 text-left text-[12px] hover:bg-hover ${
+              it.danger ? "text-del" : "text-fg"
             }`}
             onClick={() => {
               onClose();
@@ -157,25 +157,25 @@ export function PromptPopover({
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
             }}
-            className="mb-2 w-full rounded border border-neutral-300 bg-white px-2 py-1 text-[12px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-blue-500 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+            className="mb-2 w-full rounded border border-edge bg-surface px-2 py-1 text-[12px] text-fg outline-none placeholder:text-faint focus:border-accent"
           />
         )}
         {error && (
-          <div className="mb-2 text-[11px] whitespace-pre-wrap text-red-600 select-text dark:text-red-400">
+          <div className="mb-2 text-[11px] whitespace-pre-wrap text-del select-text">
             {error}
           </div>
         )}
         <div className="flex justify-end gap-1.5">
           <button
-            className="rounded px-2 py-1 text-[11px] text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-700"
+            className="rounded px-2 py-1 text-[11px] text-muted hover:bg-hover"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             disabled={busy}
-            className={`rounded px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50 ${
-              danger ? "bg-red-600 hover:bg-red-500" : "bg-blue-600 hover:bg-blue-500"
+            className={`rounded px-2 py-1 text-[11px] font-medium disabled:opacity-50 ${
+              danger ? "bg-del text-white hover:opacity-90" : "bg-accent text-accent-fg hover:opacity-90"
             }`}
             onClick={submit}
           >

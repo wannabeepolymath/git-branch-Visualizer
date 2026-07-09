@@ -43,7 +43,7 @@ impl Settings {
             active_repo_id: None,
             shortcut: shortcut.to_string(),
             launch_at_login: false,
-            theme: "system".to_string(),
+            theme: "graphite".to_string(),
             commits_per_page: 200,
             show_remote_branches: true,
             confirm_actions: true,

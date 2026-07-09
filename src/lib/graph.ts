@@ -23,19 +23,20 @@ export interface GraphLayout {
   maxLanes: number;
 }
 
-export const PALETTE = [
-  "#3b82f6", // blue
-  "#10b981", // emerald
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#8b5cf6", // violet
-  "#ec4899", // pink
-  "#06b6d4", // cyan
-  "#84cc16", // lime
-] as const;
+import type { ThemeName } from "./ipc";
 
-export function laneColor(lane: number): string {
-  return PALETTE[lane % PALETTE.length];
+// Lane rail colors per theme. SVG stroke/fill are presentation attributes that
+// can't read CSS vars, so the rail palette lives here and is threaded in as a
+// prop rather than tokenized in index.css.
+export const LANE_PALETTES: Record<ThemeName, readonly string[]> = {
+  graphite: ["#8b8cf6", "#48b4c4", "#e0a458", "#e07a9b", "#7bd88f", "#c4a2f5", "#5bb8e0", "#d9d06b"],
+  paper: ["#0f8a72", "#4f46e5", "#c2410c", "#dc2626", "#7c3aed", "#0891b2", "#b45309", "#be185d"],
+  terminal: ["#4ade80", "#22d3ee", "#f472b6", "#fbbf24", "#a78bfa", "#fb923c", "#34d399", "#60a5fa"],
+};
+
+export function laneColor(lane: number, theme: ThemeName = "graphite"): string {
+  const p = LANE_PALETTES[theme];
+  return p[lane % p.length];
 }
 
 export function layoutGraph(commits: readonly GraphCommit[]): GraphLayout {

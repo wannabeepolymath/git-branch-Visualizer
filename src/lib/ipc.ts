@@ -45,12 +45,21 @@ export interface WorkingStatus {
   unstaged: FileChange[]; // untracked files appear here with status "?"
 }
 
+/** Visual identity. Each is a complete, self-contained look (see index.css). */
+export type ThemeName = "graphite" | "paper" | "terminal";
+export const THEME_NAMES: ThemeName[] = ["graphite", "paper", "terminal"];
+
+/** Map any stored value (incl. legacy "system"/"light"/"dark") to a real theme. */
+export function normalizeTheme(t: string): ThemeName {
+  return t === "paper" || t === "terminal" ? t : "graphite";
+}
+
 export interface Settings {
   repos: RepoInfo[];
   activeRepoId: string | null;
   shortcut: string;
   launchAtLogin: boolean;
-  theme: "system" | "light" | "dark";
+  theme: string; // one of ThemeName; normalizeTheme() guards legacy values
   commitsPerPage: number;
   showRemoteBranches: boolean;
   confirmActions: boolean;

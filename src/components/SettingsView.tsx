@@ -1,8 +1,25 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
-import { getSettings, removeRepo, updateSettings, type RepoInfo, type Settings } from "../lib/ipc";
+import {
+  getSettings,
+  normalizeTheme,
+  removeRepo,
+  THEME_NAMES,
+  updateSettings,
+  type RepoInfo,
+  type Settings,
+  type ThemeName,
+} from "../lib/ipc";
 import { PromptPopover } from "./ContextMenu";
 
 const MODIFIER_KEYS = new Set(["Control", "Alt", "Shift", "Meta"]);
+
+// Name + one-line blurb + a few representative colors (panel, edge, accent, lane)
+// for each theme's picker card. Kept in sync with the palettes in index.css.
+const THEME_META: Record<ThemeName, { label: string; blurb: string; swatch: [string, string, string, string] }> = {
+  graphite: { label: "Graphite", blurb: "Calm, dark, pro", swatch: ["#12141b", "#23262f", "#8b8cf6", "#48b4c4"] },
+  paper: { label: "Paper", blurb: "Light, roomy", swatch: ["#ffffff", "#e4e8e7", "#0f8a72", "#4f46e5"] },
+  terminal: { label: "Terminal", blurb: "Dark, mono", swatch: ["#0a0f0c", "#17271c", "#4ade80", "#22d3ee"] },
+};
 
 /** Tauri global-shortcut plugin format: modifiers joined by "+", then the key. */
 function formatShortcut(e: KeyboardEvent): string | null {
@@ -26,7 +43,7 @@ function formatShortcut(e: KeyboardEvent): string | null {
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <div className="px-3 pt-3 pb-1 text-[10px] font-semibold tracking-wider text-neutral-400 uppercase">
+    <div className="px-3 pt-3 pb-1 text-[10px] font-semibold tracking-wider text-faint uppercase">
       {children}
     </div>
   );
@@ -43,13 +60,11 @@ function XIcon() {
 export function SettingsView({
   settings,
   onSettingsChange,
-  onBack,
   onAddRepo,
   onToast,
 }: {
   settings: Settings;
   onSettingsChange: (s: Settings) => void;
-  onBack: () => void;
   onAddRepo: () => void;
   onToast: (msg: string) => void;
 }) {
@@ -94,7 +109,7 @@ export function SettingsView({
         <SectionLabel>Repositories</SectionLabel>
         <div>
           {settings.repos.length === 0 && (
-            <div className="px-3 py-1 text-[11px] text-neutral-400">No repositories yet</div>
+            <div className="px-3 py-1 text-[11px] text-faint">No repositories yet</div>
           )}
           {settings.repos.map((r) => (
             <div key={r.id} className="flex h-8 items-center gap-2 px-3">
@@ -102,17 +117,17 @@ export function SettingsView({
                 <div
                   className={`truncate text-[12px] ${
                     r.id === settings.activeRepoId
-                      ? "font-semibold text-blue-600 dark:text-blue-400"
-                      : "text-neutral-800 dark:text-neutral-200"
+                      ? "font-semibold text-accent"
+                      : "text-fg"
                   }`}
                 >
                   {r.name}
                 </div>
-                <div className="truncate text-[10px] text-neutral-400">{r.path}</div>
+                <div className="truncate text-[10px] text-faint">{r.path}</div>
               </div>
               <button
                 aria-label={`Remove ${r.name}`}
-                className="flex size-5 shrink-0 items-center justify-center rounded text-neutral-400 hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-800 dark:hover:text-red-400"
+                className="flex size-5 shrink-0 items-center justify-center rounded text-faint hover:bg-hover hover:text-del"
                 onClick={(e) => setRemoveTarget({ x: e.clientX, y: e.clientY, repo: r })}
               >
                 <XIcon />
@@ -122,7 +137,7 @@ export function SettingsView({
         </div>
         <div className="px-3 pt-2">
           <button
-            className="rounded border border-neutral-300 px-2 py-1 text-[11px] text-neutral-600 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            className="rounded border border-edge px-2 py-1 text-[11px] text-muted hover:bg-hover"
             onClick={onAddRepo}
           >
             Add repository…
@@ -131,7 +146,7 @@ export function SettingsView({
 
         <SectionLabel>Shortcut</SectionLabel>
         <div className="px-3">
-          <label className="mb-1 block text-[11px] text-neutral-500 dark:text-neutral-400" htmlFor="shortcut-recorder">
+          <label className="mb-1 block text-[11px] text-muted" htmlFor="shortcut-recorder">
             Global shortcut
           </label>
           <button
@@ -142,10 +157,8 @@ export function SettingsView({
             onBlur={() => setRecording(false)}
             onKeyDown={onShortcutKeyDown}
             className={`w-full rounded border px-2 py-1 text-left text-[12px] outline-none ${
-              recording
-                ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                : "border-neutral-300 text-neutral-800 dark:border-neutral-600 dark:text-neutral-200"
-            } bg-white dark:bg-neutral-900`}
+              recording ? "border-accent text-accent" : "border-edge text-fg"
+            } bg-surface`}
           >
             {recording ? "Press a key combination… (Esc to cancel)" : settings.shortcut}
           </button>
@@ -155,7 +168,7 @@ export function SettingsView({
         <label className="flex h-8 items-center gap-2 px-3 text-[12px]">
           <input
             type="checkbox"
-            className="size-3.5 accent-blue-600"
+            className="size-3.5 accent-accent"
             checked={settings.launchAtLogin}
             onChange={(e) => void patch({ launchAtLogin: e.target.checked })}
           />
@@ -164,31 +177,46 @@ export function SettingsView({
         <label className="flex h-8 items-center gap-2 px-3 text-[12px]">
           <input
             type="checkbox"
-            className="size-3.5 accent-blue-600"
+            className="size-3.5 accent-accent"
             checked={settings.confirmActions}
             onChange={(e) => void patch({ confirmActions: e.target.checked })}
           />
           Confirm before staging, discarding, and other file actions
         </label>
-        <div className="flex items-center gap-2 px-3 py-1">
-          <label className="text-[12px] text-neutral-600 dark:text-neutral-300" htmlFor="theme-select">
-            Theme
-          </label>
-          <select
-            id="theme-select"
-            value={settings.theme}
-            onChange={(e) => void patch({ theme: e.target.value as Settings["theme"] })}
-            className="rounded border border-neutral-300 bg-white px-1.5 py-0.5 text-[12px] outline-none dark:border-neutral-600 dark:bg-neutral-900"
-          >
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
+        <SectionLabel>Theme</SectionLabel>
+        <div className="grid grid-cols-3 gap-2 px-3 pt-1">
+          {THEME_NAMES.map((t) => {
+            const m = THEME_META[t];
+            const active = normalizeTheme(settings.theme) === t;
+            return (
+              <button
+                key={t}
+                aria-pressed={active}
+                onClick={() => void patch({ theme: t })}
+                className={`overflow-hidden rounded-md border text-left ${
+                  active ? "border-accent ring-1 ring-accent" : "border-edge hover:border-muted"
+                }`}
+              >
+                <div className="flex h-8 items-center justify-center gap-1" style={{ background: m.swatch[0] }}>
+                  <span className="size-2.5 rounded-full" style={{ background: m.swatch[2] }} />
+                  <span className="size-2.5 rounded-full" style={{ background: m.swatch[3] }} />
+                  <span className="size-2.5 rounded-full" style={{ background: m.swatch[1] }} />
+                </div>
+                <div className="px-2 py-1.5">
+                  <div className="flex items-center gap-1 text-[12px] font-medium text-fg">
+                    {m.label}
+                    {active && <span className="text-accent">✓</span>}
+                  </div>
+                  <div className="text-[10px] text-faint">{m.blurb}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         <SectionLabel>Graph</SectionLabel>
         <div className="flex items-center gap-2 px-3 py-1">
-          <label className="text-[12px] text-neutral-600 dark:text-neutral-300" htmlFor="commits-per-page">
+          <label className="text-[12px] text-muted" htmlFor="commits-per-page">
             Commits per page
           </label>
           <input
@@ -202,27 +230,18 @@ export function SettingsView({
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
             }}
-            className="w-20 rounded border border-neutral-300 bg-white px-1.5 py-0.5 text-[12px] outline-none dark:border-neutral-600 dark:bg-neutral-900"
+            className="w-20 rounded border border-edge bg-surface px-1.5 py-0.5 text-[12px] outline-none"
           />
         </div>
         <label className="flex h-8 items-center gap-2 px-3 text-[12px]">
           <input
             type="checkbox"
-            className="size-3.5 accent-blue-600"
+            className="size-3.5 accent-accent"
             checked={settings.showRemoteBranches}
             onChange={(e) => void patch({ showRemoteBranches: e.target.checked })}
           />
           Show remote branches by default
         </label>
-      </div>
-
-      <div className="border-t border-neutral-200 p-2 dark:border-neutral-800">
-        <button
-          className="rounded border border-neutral-300 px-3 py-1 text-[12px] text-neutral-600 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          onClick={onBack}
-        >
-          Back
-        </button>
       </div>
 
       {removeTarget && (

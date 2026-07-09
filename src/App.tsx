@@ -3,6 +3,7 @@ import {
   addRepo,
   getBranches,
   getSettings,
+  normalizeTheme,
   onRepoChanged,
   pickRepoFolder,
   setActiveRepo,
@@ -77,18 +78,10 @@ export default function App() {
       .catch((e: unknown) => show(String(e)));
   }, [show]);
 
-  // Theme: drive the `dark` class on <html> from settings ("system" tracks the OS).
-  const theme = settings?.theme ?? "system";
+  // Theme: each visual identity is a full palette selected by `data-theme` on <html>.
+  const theme = normalizeTheme(settings?.theme ?? "graphite");
   useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () =>
-      document.documentElement.classList.toggle(
-        "dark",
-        theme === "dark" || (theme === "system" && mq.matches),
-      );
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
+    document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
   useEffect(() => {
@@ -153,14 +146,14 @@ export default function App() {
 
   if (!settings) {
     return (
-      <main className="flex h-screen w-screen items-center justify-center bg-white select-none dark:bg-neutral-900">
-        <span className="text-[12px] text-neutral-400">Loading…</span>
+      <main className="flex h-screen w-screen items-center justify-center bg-surface select-none">
+        <span className="text-[12px] text-faint">Loading…</span>
       </main>
     );
   }
 
   return (
-    <main className="flex h-screen w-screen flex-col overflow-hidden bg-white text-[13px] text-neutral-800 select-none dark:bg-neutral-900 dark:text-neutral-200">
+    <main className="flex h-screen w-screen flex-col overflow-hidden bg-surface text-[13px] text-fg select-none">
       <Header
         settings={settings}
         activeRepo={activeRepo}
@@ -177,22 +170,19 @@ export default function App() {
         <SettingsView
           settings={settings}
           onSettingsChange={setSettings}
-          onBack={() => setView("main")}
           onAddRepo={() => void addRepository()}
           onToast={show}
         />
       ) : !activeRepo ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3">
           <div className="text-center">
-            <div className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-              No repository yet
-            </div>
-            <div className="mt-0.5 text-[11px] text-neutral-400 dark:text-neutral-500">
+            <div className="text-[13px] font-medium text-muted">No repository yet</div>
+            <div className="mt-0.5 text-[11px] text-faint">
               Add a local git repository to get started
             </div>
           </div>
           <button
-            className="rounded bg-blue-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-blue-500"
+            className="rounded bg-accent px-3 py-1.5 text-[12px] font-medium text-accent-fg hover:opacity-90"
             onClick={() => void addRepository()}
           >
             Add repository
@@ -219,7 +209,7 @@ export default function App() {
                 aria-orientation="vertical"
                 aria-label="Resize branch panel"
                 onMouseDown={startSidebarResize}
-                className="-ml-[2px] w-[3px] shrink-0 cursor-col-resize hover:bg-blue-500/50 active:bg-blue-500/70"
+                className="-ml-[2px] w-[3px] shrink-0 cursor-col-resize hover:bg-accent/50 active:bg-accent/70"
               />
             </>
           )}
@@ -229,6 +219,7 @@ export default function App() {
             pageSize={settings.commitsPerPage > 0 ? settings.commitsPerPage : 200}
             refreshKey={refreshKey}
             confirmActions={settings.confirmActions}
+            theme={theme}
             onToast={show}
             onChanged={refresh}
           />

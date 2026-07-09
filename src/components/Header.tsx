@@ -60,6 +60,14 @@ function PanelLeftIcon({ open }: { open: boolean }) {
   );
 }
 
+function BackIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
 function GearIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -70,30 +78,34 @@ function GearIcon() {
 }
 
 const iconBtn =
-  "flex size-6 items-center justify-center rounded text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-40 disabled:hover:bg-transparent dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200";
+  "flex size-6 items-center justify-center rounded text-muted hover:bg-hover hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent";
 
 function IconButton({
   label,
   active = false,
   disabled = false,
+  tipLeft = false,
   onClick,
   children,
 }: {
   label: string;
   active?: boolean;
   disabled?: boolean;
+  tipLeft?: boolean; // align tooltip to the left edge (for buttons near the window's left)
   onClick: () => void;
   children: ReactNode;
 }) {
   return (
     <button
-      className={`group relative ${iconBtn} ${active ? "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200" : ""}`}
+      className={`group relative ${iconBtn} ${active ? "bg-hover text-fg" : ""}`}
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
     >
       {children}
-      <span className="pointer-events-none absolute top-full right-0 z-50 mt-1 hidden rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] whitespace-nowrap text-white group-hover:block dark:bg-neutral-600">
+      <span
+        className={`pointer-events-none absolute top-full ${tipLeft ? "left-0" : "right-0"} z-50 mt-1 hidden rounded bg-fg px-1.5 py-0.5 text-[10px] whitespace-nowrap text-surface group-hover:block`}
+      >
         {label}
       </span>
     </button>
@@ -156,27 +168,43 @@ export function Header({
   return (
     <header
       data-tauri-drag-region=""
-      className="relative flex h-10 shrink-0 items-center gap-1 border-b border-neutral-200 px-2 dark:border-neutral-800"
+      className="relative flex h-10 shrink-0 items-center gap-1 border-b border-edge px-2"
     >
-      <div ref={switcherRef} className="relative min-w-0">
+      {inSettings ? (
+        <IconButton label="Back" tipLeft onClick={onToggleSettings}>
+          <BackIcon />
+        </IconButton>
+      ) : (
+        <IconButton
+          label={sidebarVisible ? "Hide branch panel" : "Show branch panel"}
+          tipLeft
+          disabled={!activeRepo}
+          onClick={onToggleSidebar}
+        >
+          <PanelLeftIcon open={sidebarVisible} />
+        </IconButton>
+      )}
+
+      {!inSettings && (
+        <div ref={switcherRef} className="relative min-w-0">
         <button
-          className="flex max-w-[240px] items-center gap-1.5 rounded px-1.5 py-1 text-[13px] font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          className="flex max-w-[240px] items-center gap-1.5 rounded px-1.5 py-1 text-[13px] font-medium hover:bg-hover"
           onClick={() => setOpen((o) => !o)}
         >
           <span className="truncate">{activeRepo ? activeRepo.name : "No repository"}</span>
-          <span className="shrink-0 text-neutral-400">
+          <span className="shrink-0 text-faint">
             <ChevronDownIcon />
           </span>
         </button>
         {open && (
-          <div className="absolute top-full left-0 z-50 mt-1 w-64 rounded-md border border-neutral-200 bg-white py-1 shadow-xl shadow-black/10 dark:border-neutral-700 dark:bg-neutral-800 dark:shadow-black/40">
+          <div className="absolute top-full left-0 z-50 mt-1 w-64 rounded-md border border-edge bg-panel py-1 shadow-xl shadow-black/20">
             {settings.repos.length === 0 && (
-              <div className="px-3 py-1.5 text-[11px] text-neutral-400">No repositories yet</div>
+              <div className="px-3 py-1.5 text-[11px] text-faint">No repositories yet</div>
             )}
             {settings.repos.map((r) => (
               <button
                 key={r.id}
-                className="block w-full px-3 py-1.5 text-left hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                className="block w-full px-3 py-1.5 text-left hover:bg-hover"
                 onClick={() => {
                   setOpen(false);
                   if (r.id !== activeRepo?.id) onSwitchRepo(r.id);
@@ -185,18 +213,18 @@ export function Header({
                 <div
                   className={`truncate text-[12px] ${
                     r.id === activeRepo?.id
-                      ? "font-semibold text-blue-600 dark:text-blue-400"
-                      : "text-neutral-800 dark:text-neutral-200"
+                      ? "font-semibold text-accent"
+                      : "text-fg"
                   }`}
                 >
                   {r.name}
                 </div>
-                <div className="truncate text-[10px] text-neutral-400">{r.path}</div>
+                <div className="truncate text-[10px] text-faint">{r.path}</div>
               </button>
             ))}
-            <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
+            <div className="my-1 border-t border-edge" />
             <button
-              className="block w-full px-3 py-1.5 text-left text-[12px] text-blue-600 hover:bg-neutral-100 dark:text-blue-400 dark:hover:bg-neutral-700"
+              className="block w-full px-3 py-1.5 text-left text-[12px] text-accent hover:bg-hover"
               onClick={() => {
                 setOpen(false);
                 onAddRepo();
@@ -206,26 +234,24 @@ export function Header({
             </button>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       <div data-tauri-drag-region="" className="h-full flex-1" />
 
-      <IconButton
-        label={sidebarVisible ? "Hide branch panel" : "Show branch panel"}
-        disabled={!activeRepo}
-        onClick={onToggleSidebar}
-      >
-        <PanelLeftIcon open={sidebarVisible} />
-      </IconButton>
-      <IconButton label="Fetch" disabled={!activeRepo || fetching} onClick={doFetch}>
-        <RefreshIcon spinning={fetching} />
-      </IconButton>
-      <IconButton label="Pull" disabled={!activeRepo || pulling} onClick={doPull}>
-        <PullIcon spinning={pulling} />
-      </IconButton>
-      <IconButton label="Settings" active={inSettings} onClick={onToggleSettings}>
-        <GearIcon />
-      </IconButton>
+      {!inSettings && (
+        <>
+          <IconButton label="Fetch" disabled={!activeRepo || fetching} onClick={doFetch}>
+            <RefreshIcon spinning={fetching} />
+          </IconButton>
+          <IconButton label="Pull" disabled={!activeRepo || pulling} onClick={doPull}>
+            <PullIcon spinning={pulling} />
+          </IconButton>
+          <IconButton label="Settings" active={inSettings} onClick={onToggleSettings}>
+            <GearIcon />
+          </IconButton>
+        </>
+      )}
     </header>
   );
 }

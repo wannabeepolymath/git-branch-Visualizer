@@ -1,7 +1,136 @@
 @import "tailwindcss";
 
-/* Class-driven dark mode: App toggles `dark` on <html> from settings.theme. */
-@custom-variant dark (&:where(.dark, .dark *));
+/*
+ * Theming: one semantic token layer, three palettes selected by `data-theme` on
+ * <html> (App sets it from settings.theme). `@theme inline` makes every utility
+ * resolve to a raw CSS var (e.g. `bg-surface` -> `var(--bg)`), so overriding the
+ * vars per theme reskins the whole app with zero component changes.
+ */
+@theme inline {
+  --color-surface: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel2: var(--panel2);
+  --color-edge: var(--edge);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-hover: var(--hover);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-add: var(--add);
+  --color-mod: var(--mod);
+  --color-del: var(--del);
+  --color-ren: var(--ren);
+  --color-sel: var(--sel-bg);
+  --color-sel-fg: var(--sel-fg);
+  --color-pill: var(--pill-bg);
+  --color-pill-fg: var(--pill-fg);
+  --color-tag: var(--tag-bg);
+  --color-tag-fg: var(--tag-fg);
+}
+
+/* ---- A · Graphite (also the default before App sets data-theme) ---- */
+:root,
+:root[data-theme="graphite"] {
+  --bg: #0e1016;
+  --panel: #12141b;
+  --panel2: #171a22;
+  --edge: #23262f;
+  --fg: #d3d6df;
+  --muted: #868b98;
+  --faint: #5b606d;
+  --accent: #8b8cf6;
+  --accent-soft: rgba(139, 140, 246, 0.14);
+  --accent-fg: #0e1016;
+  --hover: rgba(255, 255, 255, 0.035);
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --add: #4ade80;
+  --mod: #fbbf24;
+  --del: #f87171;
+  --ren: #c4a2f5;
+  --sel-bg: rgba(139, 140, 246, 0.13);
+  --sel-fg: #bcbdff;
+  --pill-bg: rgba(139, 140, 246, 0.16);
+  --pill-fg: #a9aaf8;
+  --tag-bg: rgba(251, 191, 36, 0.13);
+  --tag-fg: #f4c14e;
+  --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+}
+
+/* ---- B · Paper (light) ---- */
+:root[data-theme="paper"] {
+  --bg: #f4f6f5;
+  --panel: #ffffff;
+  --panel2: #f7f9f8;
+  --edge: #e4e8e7;
+  --fg: #1b2422;
+  --muted: #5f6b68;
+  --faint: #98a4a0;
+  --accent: #0f8a72;
+  --accent-soft: rgba(15, 138, 114, 0.10);
+  --accent-fg: #ffffff;
+  --hover: rgba(15, 138, 114, 0.05);
+  --good: #12a37a;
+  --warn: #c2410c;
+  --add: #12a37a;
+  --mod: #b45309;
+  --del: #dc2626;
+  --ren: #7c3aed;
+  --sel-bg: rgba(15, 138, 114, 0.10);
+  --sel-fg: #0b6b58;
+  --pill-bg: rgba(15, 138, 114, 0.12);
+  --pill-fg: #0b6b58;
+  --tag-bg: rgba(180, 83, 9, 0.12);
+  --tag-fg: #a2560a;
+  --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 13px;
+  --radius-xl: 16px;
+}
+
+/* ---- C · Terminal (dark, monospace) ---- */
+:root[data-theme="terminal"] {
+  --bg: #060a08;
+  --panel: #0a0f0c;
+  --panel2: #0d130f;
+  --edge: #17271c;
+  --fg: #cbe8d6;
+  --muted: #7d9c88;
+  --faint: #4c6355;
+  --accent: #4ade80;
+  --accent-soft: rgba(74, 222, 128, 0.13);
+  --accent-fg: #05100a;
+  --hover: rgba(74, 222, 128, 0.06);
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --add: #4ade80;
+  --mod: #fbbf24;
+  --del: #ff6b6b;
+  --ren: #c084fc;
+  --sel-bg: rgba(74, 222, 128, 0.11);
+  --sel-fg: #8ffcb4;
+  --pill-bg: rgba(74, 222, 128, 0.10);
+  --pill-fg: #22d3ee;
+  --tag-bg: rgba(251, 191, 36, 0.10);
+  --tag-fg: #fbbf24;
+  --app-font: ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --radius-xs: 1px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-xl: 4px;
+}
 
 html,
 body,
@@ -14,4 +143,7 @@ body {
   overflow: hidden;
   cursor: default;
   -webkit-font-smoothing: antialiased;
+  font-family: var(--app-font);
+  background: var(--bg);
+  color: var(--fg);
 }
