@@ -134,6 +134,8 @@ export function Header({
   onChanged,
   onToast,
   onResetWindow,
+  focusedWorktreeLabel,
+  onClearFocus,
 }: {
   settings: Settings;
   activeRepo: RepoInfo | null;
@@ -146,6 +148,9 @@ export function Header({
   onChanged: () => void;
   onToast: (msg: string) => void;
   onResetWindow: () => void;
+  /** Branch/short-SHA of the focused worktree, when it isn't the main one. */
+  focusedWorktreeLabel?: string;
+  onClearFocus: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -247,6 +252,18 @@ export function Header({
           </div>
         )}
         </div>
+      )}
+
+      {!inSettings && focusedWorktreeLabel && (
+        <button
+          className="flex min-w-0 shrink items-center gap-1 rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent hover:opacity-80"
+          onClick={onClearFocus}
+          title="Focused worktree — click to return to the main worktree"
+        >
+          <span className="shrink-0">⧉</span>
+          <span className="max-w-[120px] truncate">{focusedWorktreeLabel}</span>
+          <span className="shrink-0 opacity-70">✕</span>
+        </button>
       )}
 
       <div data-tauri-drag-region="" className="h-full flex-1" />

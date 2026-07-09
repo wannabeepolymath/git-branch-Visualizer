@@ -19,6 +19,29 @@ fn save(state: &AppState) -> Result<(), String> {
     state::persist(&state.config_path, &snap)
 }
 
+/// Working directory a worktree-sensitive command should run in. `None`/empty →
+/// the repo's main path. Otherwise the path is validated to be a worktree of this
+/// repo (shares its common git dir) before being trusted as a cwd.
+// ponytail: two extra `rev-parse` calls per routed action for validation; cache the
+// worktree set in AppState only if it ever profiles hot.
+fn work_dir(
+    state: &AppState,
+    repo_id: &str,
+    worktree_path: Option<String>,
+) -> Result<String, String> {
+    let repo = state.repo_path(repo_id)?;
+    match worktree_path {
+        Some(wt) if !wt.is_empty() && wt != repo => {
+            if git::common_dir(&repo)? == git::common_dir(&wt)? {
+                Ok(wt)
+            } else {
+                Err(format!("not a worktree of this repo: {wt}"))
+            }
+        }
+        _ => Ok(repo),
+    }
+}
+
 #[tauri::command]
 pub fn get_settings(state: State<AppState>) -> Result<Settings, String> {
     state.snapshot()
@@ -221,8 +244,9 @@ pub async fn get_commit(
 pub async fn get_status(
     state: State<'_, AppState>,
     repo_id: String,
+    worktree_path: Option<String>,
 ) -> Result<git::WorkingStatus, String> {
-    let path = state.repo_path(&repo_id)?;
+    let path = work_dir(&state, &repo_id, worktree_path)?;
     git::get_status(&path)
 }
 
@@ -233,8 +257,9 @@ pub async fn diff_file(
     path: String,
     staged: bool,
     untracked: bool,
+    worktree_path: Option<String>,
 ) -> Result<String, String> {
-    let repo = state.repo_path(&repo_id)?;
+    let repo = work_dir(&state, &repo_id, worktree_path)?;
     git::diff_file(&repo, &path, staged, untracked)
 }
 
@@ -243,8 +268,9 @@ pub async fn stage_files(
     state: State<'_, AppState>,
     repo_id: String,
     paths: Vec<String>,
+    worktree_path: Option<String>,
 ) -> Result<(), String> {
-    let repo = state.repo_path(&repo_id)?;
+    let repo = work_dir(&state, &repo_id, worktree_path)?;
     git::stage(&repo, &paths)
 }
 
@@ -253,8 +279,9 @@ pub async fn unstage_files(
     state: State<'_, AppState>,
     repo_id: String,
     paths: Vec<String>,
+    worktree_path: Option<String>,
 ) -> Result<(), String> {
-    let repo = state.repo_path(&repo_id)?;
+    let repo = work_dir(&state, &repo_id, worktree_path)?;
     git::unstage(&repo, &paths)
 }
 
@@ -264,8 +291,9 @@ pub async fn discard_files(
     repo_id: String,
     paths: Vec<String>,
     untracked: bool,
+    worktree_path: Option<String>,
 ) -> Result<(), String> {
-    let repo = state.repo_path(&repo_id)?;
+    let repo = work_dir(&state, &repo_id, worktree_path)?;
     git::discard(&repo, &paths, untracked)
 }
 
@@ -274,8 +302,9 @@ pub async fn checkout(
     state: State<'_, AppState>,
     repo_id: String,
     ref_name: String,
+    worktree_path: Option<String>,
 ) -> Result<(), String> {
-    let path = state.repo_path(&repo_id)?;
+    let path = work_dir(&state, &repo_id, worktree_path)?;
     git::checkout(&path, &ref_name)
 }
 

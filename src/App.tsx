@@ -78,6 +78,18 @@ export default function App() {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
+  // The worktree the app acts on. Pass undefined when it's the main worktree so
+  // backend commands use the repo path directly and skip worktree validation.
+  const focusedWt = worktrees.find((w) => w.path === focusedWorktree);
+  const worktreeArg = focusedWt && !focusedWt.isMain ? focusedWt.path : undefined;
+  const focusedWorktreeLabel = worktreeArg
+    ? (focusedWt?.branch ?? focusedWt?.head.slice(0, 7))
+    : undefined;
+  const clearFocus = () => {
+    const main = worktrees.find((w) => w.isMain);
+    if (main) setFocusedWorktree(main.path);
+  };
+
   // null clears to "all branches". additive (⌘/Ctrl-click) toggles a ref in the set; plain click focuses one.
   const selectRef = useCallback((ref: string | null, additive: boolean) => {
     if (ref === null) return setSelectedRefs([]);
@@ -205,6 +217,8 @@ export default function App() {
         onChanged={refresh}
         onToast={show}
         onResetWindow={resetWindow}
+        focusedWorktreeLabel={focusedWorktreeLabel}
+        onClearFocus={clearFocus}
       />
       {view === "settings" ? (
         <SettingsView
@@ -258,6 +272,7 @@ export default function App() {
           )}
           <CommitGraph
             repoId={activeRepo.id}
+            worktreePath={worktreeArg}
             refs={selectedRefs}
             pageSize={settings.commitsPerPage > 0 ? settings.commitsPerPage : 200}
             refreshKey={refreshKey}

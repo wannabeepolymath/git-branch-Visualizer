@@ -463,6 +463,13 @@ pub fn pull(repo: &str) -> Result<(), String> {
     git(repo, &["pull", "--ff-only"]).map(|_| ())
 }
 
+/// Absolute path to the repository's common git dir — the same for a repo and all
+/// its linked worktrees. Used to check a candidate worktree belongs to a given repo.
+pub fn common_dir(path: &str) -> Result<String, String> {
+    let out = git(path, &["rev-parse", "--path-format=absolute", "--git-common-dir"])?;
+    Ok(out.trim().to_string())
+}
+
 /// Validate `path` is inside a work tree and return the repo top-level path.
 pub fn resolve_toplevel(path: &str) -> Result<String, String> {
     let inside = git(path, &["rev-parse", "--is-inside-work-tree"])?;

@@ -102,6 +102,7 @@ export function BranchPane({
     worktrees.map((w) => w.branch).filter((b): b is string => !!b),
   );
   const focusedWt = worktrees.find((w) => w.path === focusedWorktreePath);
+  const worktreeArg = focusedWt && !focusedWt.isMain ? focusedWt.path : undefined;
   const currentName = focusedWt?.branch ?? branches.find((b) => b.isCurrent)?.name ?? null;
   const current = branches.filter((b) => !b.isRemote && b.name === currentName && match(b));
   const local = branches.filter((b) => !b.isRemote && b.name !== currentName && match(b));
@@ -123,7 +124,10 @@ export function BranchPane({
   const menuItems = (m: { x: number; y: number; branch: BranchInfo }): MenuItem[] => {
     const b = m.branch;
     const items: MenuItem[] = [
-      { label: "Checkout", onClick: () => run(checkout(repoId, b.name), `Checked out ${b.name}`) },
+      {
+        label: "Checkout",
+        onClick: () => run(checkout(repoId, b.name, worktreeArg), `Checked out ${b.name}`),
+      },
       {
         label: "New branch from here…",
         onClick: () => setPrompt({ x: m.x, y: m.y, kind: "new", branch: b }),

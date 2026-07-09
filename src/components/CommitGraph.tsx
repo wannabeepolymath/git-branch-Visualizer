@@ -292,12 +292,14 @@ function DetailPanel({
  */
 function WorkingChanges({
   repoId,
+  worktreePath,
   refreshKey,
   confirmActions,
   onToast,
   onChanged,
 }: {
   repoId: string;
+  worktreePath?: string;
   refreshKey: number;
   confirmActions: boolean;
   onToast: (msg: string) => void;
@@ -319,10 +321,10 @@ function WorkingChanges({
   openDiffRef.current = openDiff;
 
   const load = useCallback(() => {
-    getStatus(repoId)
+    getStatus(repoId, worktreePath)
       .then(setStatus)
       .catch((e: unknown) => onToast(String(e)));
-  }, [repoId, onToast]);
+  }, [repoId, worktreePath, onToast]);
 
   useEffect(() => {
     load();
@@ -356,7 +358,7 @@ function WorkingChanges({
     }
     setOpenDiff(key);
     setDiffText(null);
-    diffFile(repoId, f.path, isStaged, f.status === "?")
+    diffFile(repoId, f.path, isStaged, f.status === "?", worktreePath)
       .then((t) => {
         if (openDiffRef.current === key) setDiffText(t);
       })
@@ -403,7 +405,11 @@ function WorkingChanges({
         label="Unstage"
         title="Unstage"
         onClick={() =>
-          arm({ id: key, label: "Unstage", run: () => act(unstageFiles(repoId, [f.path]), "Unstaged") })
+          arm({
+            id: key,
+            label: "Unstage",
+            run: () => act(unstageFiles(repoId, [f.path], worktreePath), "Unstaged"),
+          })
         }
       />
     ) : (
@@ -412,7 +418,11 @@ function WorkingChanges({
           label="Stage"
           title="Stage"
           onClick={() =>
-            arm({ id: key, label: "Stage", run: () => act(stageFiles(repoId, [f.path]), "Staged") })
+            arm({
+              id: key,
+              label: "Stage",
+              run: () => act(stageFiles(repoId, [f.path], worktreePath), "Staged"),
+            })
           }
         />
         <ActBtn
@@ -424,7 +434,7 @@ function WorkingChanges({
               id: key,
               label: "Discard",
               danger: true,
-              run: () => act(discardFiles(repoId, [f.path], f.status === "?"), "Discarded"),
+              run: () => act(discardFiles(repoId, [f.path], f.status === "?", worktreePath), "Discarded"),
             })
           }
         />
@@ -487,7 +497,7 @@ function WorkingChanges({
                 "all:staged",
                 "Staged",
                 "Unstage all",
-                () => act(unstageFiles(repoId, staged.map((f) => f.path)), "Unstaged all"),
+                () => act(unstageFiles(repoId, staged.map((f) => f.path), worktreePath), "Unstaged all"),
                 false,
               )}
               {staged.map((f) => renderFile(f, true))}
@@ -499,7 +509,7 @@ function WorkingChanges({
                 "all:unstaged",
                 "Unstaged",
                 "Stage all",
-                () => act(stageFiles(repoId, unstaged.map((f) => f.path)), "Staged all"),
+                () => act(stageFiles(repoId, unstaged.map((f) => f.path), worktreePath), "Staged all"),
                 staged.length > 0,
               )}
               {unstaged.map((f) => renderFile(f, false))}
@@ -513,6 +523,7 @@ function WorkingChanges({
 
 export function CommitGraph({
   repoId,
+  worktreePath,
   refs,
   pageSize,
   refreshKey,
@@ -522,6 +533,7 @@ export function CommitGraph({
   onChanged,
 }: {
   repoId: string;
+  worktreePath?: string;
   refs: string[];
   pageSize: number;
   refreshKey: number;
@@ -662,7 +674,7 @@ export function CommitGraph({
     {
       label: "Checkout (detached)",
       onClick: () =>
-        checkout(repoId, m.commit.hash)
+        checkout(repoId, m.commit.hash, worktreePath)
           .then(() => {
             onToast(`Checked out ${m.commit.hash.slice(0, 7)}`);
             onChanged();
@@ -723,6 +735,7 @@ export function CommitGraph({
     <div className="flex min-w-0 flex-1 flex-col">
       <WorkingChanges
         repoId={repoId}
+        worktreePath={worktreePath}
         refreshKey={refreshKey}
         confirmActions={confirmActions}
         onToast={onToast}

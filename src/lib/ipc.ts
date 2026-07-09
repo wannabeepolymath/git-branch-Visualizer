@@ -108,8 +108,10 @@ export const getLog = (
 export const getCommit = (repoId: string, hash: string): Promise<CommitDetail> =>
   invoke("get_commit", { repoId, hash });
 
-export const getStatus = (repoId: string): Promise<WorkingStatus> =>
-  invoke("get_status", { repoId });
+// `worktreePath` routes the action to a linked worktree's working dir. Omit (or
+// pass undefined) to act on the repo's main worktree.
+export const getStatus = (repoId: string, worktreePath?: string): Promise<WorkingStatus> =>
+  invoke("get_status", { repoId, worktreePath });
 
 /** Unified diff for one path. `staged` = index vs HEAD; else worktree vs index. */
 export const diffFile = (
@@ -117,22 +119,27 @@ export const diffFile = (
   path: string,
   staged: boolean,
   untracked: boolean,
-): Promise<string> => invoke("diff_file", { repoId, path, staged, untracked });
+  worktreePath?: string,
+): Promise<string> => invoke("diff_file", { repoId, path, staged, untracked, worktreePath });
 
-export const stageFiles = (repoId: string, paths: string[]): Promise<void> =>
-  invoke("stage_files", { repoId, paths });
+export const stageFiles = (repoId: string, paths: string[], worktreePath?: string): Promise<void> =>
+  invoke("stage_files", { repoId, paths, worktreePath });
 
-export const unstageFiles = (repoId: string, paths: string[]): Promise<void> =>
-  invoke("unstage_files", { repoId, paths });
+export const unstageFiles = (
+  repoId: string,
+  paths: string[],
+  worktreePath?: string,
+): Promise<void> => invoke("unstage_files", { repoId, paths, worktreePath });
 
 export const discardFiles = (
   repoId: string,
   paths: string[],
   untracked: boolean,
-): Promise<void> => invoke("discard_files", { repoId, paths, untracked });
+  worktreePath?: string,
+): Promise<void> => invoke("discard_files", { repoId, paths, untracked, worktreePath });
 
-export const checkout = (repoId: string, refName: string): Promise<void> =>
-  invoke("checkout", { repoId, refName });
+export const checkout = (repoId: string, refName: string, worktreePath?: string): Promise<void> =>
+  invoke("checkout", { repoId, refName, worktreePath });
 
 export const createBranch = (repoId: string, name: string, fromRef: string): Promise<void> =>
   invoke("create_branch", { repoId, name, fromRef });
