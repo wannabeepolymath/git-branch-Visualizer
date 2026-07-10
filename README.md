@@ -1,8 +1,12 @@
 # Branch Visualizer
 
-A macOS menu bar app that shows your git repositories' branches and commit graph, IDE-style — one click or hotkey away. Built with Tauri v2, React, TypeScript, and Tailwind. See [SPEC.md](SPEC.md) for the full product/architecture spec.
+A macOS menu bar app that keeps your git branches, worktrees, commit graph, and working tree one click or hotkey away. Built with Tauri v2, React, TypeScript, and Tailwind. See [SPEC.md](SPEC.md) for the full product/architecture spec.
 
 ![platform](https://img.shields.io/badge/platform-macOS-blue) (Windows/Linux planned — the codebase is structured for it)
+
+![Branch Visualizer showing branch filters, an uncommitted-changes panel, a commit graph, branch pills, and expanded commit details](docs/branch-visualizer-screenshot.jpg)
+
+The screenshot shows the core flow: filter branches on the left, inspect the colored commit graph on the right, open commit details inline, and handle uncommitted changes without leaving the menu bar popover.
 
 ## Requirements
 
@@ -29,35 +33,74 @@ The `.app` bundle and `.dmg` land in `src-tauri/target/release/bundle/`. (Distri
 
 ## Using the app
 
-The app lives in the **menu bar only** — no Dock icon, no regular window.
+The app lives in the **menu bar only** — no Dock icon, no regular window. Open it from the menu bar icon or the global shortcut, then work directly inside the popover.
 
 - **Open/close the popover:** click the menu bar icon, or press **⌥⇧G** (configurable). It closes automatically when it loses focus.
 - **Add a repository:** click the repo name (top-left) → *Add repository…*, or use the button on the empty state / in Settings. Pick any folder inside a git working tree.
 - **Switch repositories:** repo dropdown, top-left.
 
-### Branch panel (left)
+### Feature walkthrough
 
-- Branches grouped as **Current / Local / Remotes** (collapsible), each with ahead/behind counts (`↑2 ↓1`) and last-commit age. Filter box on top.
-- Click a branch to filter the commit graph to it; *All branches* shows everything.
-- **Right-click a branch** for: Checkout, New branch from here…, Rename… (local only), Delete… (local only, safe delete — unmerged branches are refused with git's error), Copy name.
-- Toggle the panel with the panel icon in the header; drag the divider to resize it. Both are remembered.
+- **Branches:** filter Current / Local / Remotes, see ahead/behind counts and last-commit ages, click a branch to focus the graph, or Cmd/Ctrl-click to compare multiple refs.
+- **Branch actions:** right-click for Checkout, New branch from here…, Publish / Push / Force push…, Rename…, Delete…, and Copy name. Safe delete uses `git branch -d` first and asks before escalating to `-D`.
+- **Worktrees:** when a repo has linked worktrees, switch the left pane from Branches to Worktrees, focus a worktree, see dirty/locked/prunable state, and open it with your configured editor or terminal command.
+- **Commit graph:** scan a colored-lane DAG with branch/tag pills, short hashes, authorship age, merge/fork connectors, and paginated loading as you scroll.
+- **Commit details and diffs:** click a commit to expand the full message, author/date, changed files, and per-file diffs; copy the full hash from the detail panel.
+- **Uncommitted changes:** staged and unstaged changes appear above the graph, with inline diffs plus Stage, Unstage, Stage all, Unstage all, and guarded Discard actions.
+- **Header actions:** Fetch runs `git fetch --all --prune`; Pull runs `git pull --ff-only` in the focused worktree.
+- **Live refresh:** commits, checkouts, fetches, and repo changes from outside the app refresh automatically through a `.git` watcher.
 
-### Commit graph (right)
+### All features
 
-- Colored-lane DAG of commits with merge/fork connectors, branch/tag pills, short hash, and age. Scroll to load more (paginated).
-- **Click a commit** to expand its details: full message, author, date, changed files, copy-hash button.
-- **Right-click a commit** for: Copy hash, Copy message, Create branch here…, Checkout (detached).
+- Menu-bar-only macOS app with no Dock icon.
+- Tray icon toggle plus configurable global shortcut.
+- Popover closes on blur and can be reset to its default size/position.
+- Repository picker, add-repository flow, active-repo switching, and repository removal from Settings.
+- Registered repositories persisted in the app config directory.
+- Collapsible, resizable branch panel with remembered visibility and width.
+- Branch search/filter.
+- Branch groups for Current, Local, and Remotes.
+- Optional remote-branch visibility by default.
+- Ahead/behind counters and relative last-commit ages.
+- Multi-ref graph filtering with Cmd/Ctrl-click.
+- Branch context menu: checkout, create branch from ref, publish, push, force push, rename, delete, force delete after safe-delete refusal, and copy name.
+- Worktrees tab appears when multiple worktrees exist.
+- Worktree focus routes branch checkout, pull, status, staging, and discard actions to that worktree.
+- Worktree rows show branch or detached HEAD, main-worktree label, dirty state, locked state, prunable state, and ahead/behind counts.
+- One-click worktree open button plus right-click "Open in…" menu.
+- Custom worktree open targets with `{path}` substitution and configurable default target.
+- Virtualized commit graph for large histories.
+- Colored graph lanes with merge/fork connectors.
+- Theme-aware graph styling, including Terminal's square-node TUI style.
+- Branch and tag pills on commit rows, with overflow popover for extra refs.
+- Short hashes, relative commit ages, and truncated commit subjects with titles.
+- Scroll-to-load commit pagination with configurable page size from 50 to 1000.
+- Empty, loading, and loading-more graph states.
+- Commit expansion with full subject/body, author email, local date/time, changed files, and copy-hash button.
+- Per-file commit diff expansion, including loading, empty, and truncation states.
+- Commit context menu: copy hash, copy message, create branch here, and checkout detached.
+- Pinned uncommitted-changes panel shown only when the focused worktree is dirty.
+- Staged and unstaged file sections with counts.
+- Stage, unstage, stage all, unstage all, mark-conflict-resolved, discard tracked changes, and discard untracked files.
+- Inline working-tree and staged diffs for changed files.
+- Confirmation ticks for codebase-affecting file actions when enabled; destructive discard always confirms.
+- Fetch all remotes with prune.
+- Fast-forward-only pull.
+- Toast feedback for successful actions and git errors.
+- Automatic refresh from `.git` filesystem watching.
+- Launch-at-login toggle.
+- Six built-in themes: Midnight, Obsidian, Onyx, Carbon, Terminal, and Paper.
+- Settings sections are collapsible and remember their open/closed state.
+- Read-only command reference showing the git command behind each UI action.
+- Typed React-to-Tauri IPC boundary.
+- Platform-specific code isolated for cheaper Windows/Linux ports later.
 
-### Header actions
+### Settings
 
-- **Fetch** (`git fetch --all --prune`) and **Pull** (`git pull --ff-only`) for the active repo.
-- The view refreshes automatically whenever the repository changes on disk (commits, checkouts, fetches from anywhere — a file watcher on `.git` keeps it live).
-
-### Settings (gear icon)
-
-- Manage registered repositories.
-- **Global shortcut:** click the field and press a new combo (e.g. ⌥⇧G → `Alt+Shift+G`).
-- **Launch at login**, **theme** (system/light/dark), **commits per page** (50–1000), **show remote branches**.
+- Manage repositories, launch-at-login, action confirmations, and the global shortcut.
+- Choose from six visual themes: Midnight, Obsidian, Onyx, Carbon, Terminal, and Paper.
+- Configure commits per page, remote branch visibility, and custom Worktree "open with…" commands.
+- Review the git commands each UI action runs.
 
 Settings are stored in `~/Library/Application Support/com.branchvisualizer.app/settings.json`.
 
