@@ -130,14 +130,6 @@ impl AppState {
     }
 }
 
-/// Deterministic id from the (canonical) repo path — makes dedupe trivial.
-pub fn repo_id_for(path: &str) -> String {
-    use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    path.hash(&mut h);
-    format!("{:x}", h.finish())
-}
-
 pub fn persist(path: &Path, settings: &Settings) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;

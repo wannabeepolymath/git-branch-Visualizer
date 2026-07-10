@@ -75,12 +75,15 @@ pub fn update_settings(
 ) -> Result<Settings, String> {
     let old = state.snapshot()?;
 
-    // Re-register the global shortcut if it changed.
+    // Re-register the global shortcut if it changed. Register the new combo
+    // BEFORE dropping the old one — a failed registration (combo taken by
+    // another app) must leave the old shortcut working, not strand the user
+    // with no hotkey.
     if settings.shortcut != old.shortcut {
         let gs = app.global_shortcut();
-        let _ = gs.unregister(old.shortcut.as_str());
         gs.register(settings.shortcut.as_str())
             .map_err(|e| format!("invalid shortcut '{}': {e}", settings.shortcut))?;
+        let _ = gs.unregister(old.shortcut.as_str());
     }
 
     // Enable/disable autostart if it changed.
@@ -137,11 +140,15 @@ pub async fn add_repo(
     path: String,
 ) -> Result<RepoInfo, String> {
     let toplevel = git::resolve_toplevel(&path)?;
-    let id = state::repo_id_for(&toplevel);
+    // The canonical path IS the id: stable across runs and Rust versions (a
+    // hash wasn't), and dedupe is a straight path comparison. Old hash-based
+    // ids persist in existing configs and keep working — they're only ever
+    // compared, never recomputed.
+    let id = toplevel.clone();
 
     {
         let mut s = state.settings.lock().map_err(|e| e.to_string())?;
-        if let Some(existing) = s.repos.iter().find(|r| r.id == id) {
+        if let Some(existing) = s.repos.iter().find(|r| r.path == toplevel) {
             return Ok(existing.clone());
         }
         let name = Path::new(&toplevel)
@@ -366,20 +373,29 @@ pub async fn delete_branch(
     state: State<'_, AppState>,
     repo_id: String,
     name: String,
+    force: bool,
 ) -> Result<(), String> {
     let path = state.repo_path(&repo_id)?;
-    git::delete_branch(&path, &name)
+    git::delete_branch(&path, &name, force)
 }
 
+/// Ok(true) if any ref changed — the frontend's toast says so honestly.
 #[tauri::command]
-pub async fn fetch_repo(state: State<'_, AppState>, repo_id: String) -> Result<(), String> {
+pub async fn fetch_repo(state: State<'_, AppState>, repo_id: String) -> Result<bool, String> {
     let path = state.repo_path(&repo_id)?;
     git::fetch(&path)
 }
 
+/// Pull runs in the focused worktree — it merges into a working tree, so it must
+/// target the same one the rest of the UI is acting on. Ok(false) = already up
+/// to date (nothing was pulled).
 #[tauri::command]
-pub async fn pull_repo(state: State<'_, AppState>, repo_id: String) -> Result<(), String> {
-    let path = state.repo_path(&repo_id)?;
+pub async fn pull_repo(
+    state: State<'_, AppState>,
+    repo_id: String,
+    worktree_path: Option<String>,
+) -> Result<bool, String> {
+    let path = work_dir(&state, &repo_id, worktree_path)?;
     git::pull(&path)
 }
 
@@ -388,9 +404,10 @@ pub async fn push_branch(
     state: State<'_, AppState>,
     repo_id: String,
     branch: String,
+    upstream: Option<String>,
     set_upstream: bool,
     force: bool,
 ) -> Result<(), String> {
     let path = state.repo_path(&repo_id)?;
-    git::push(&path, &branch, set_upstream, force)
+    git::push(&path, &branch, upstream.as_deref(), set_upstream, force)
 }

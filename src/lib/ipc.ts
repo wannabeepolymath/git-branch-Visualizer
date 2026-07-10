@@ -174,20 +174,32 @@ export const createBranch = (repoId: string, name: string, fromRef: string): Pro
 export const renameBranch = (repoId: string, oldName: string, newName: string): Promise<void> =>
   invoke("rename_branch", { repoId, oldName, newName });
 
-export const deleteBranch = (repoId: string, name: string): Promise<void> =>
-  invoke("delete_branch", { repoId, name });
+/** `force` = `-D` (used after a safe `-d` was refused with "not fully merged"). */
+export const deleteBranch = (repoId: string, name: string, force: boolean): Promise<void> =>
+  invoke("delete_branch", { repoId, name, force });
 
-export const fetchRepo = (repoId: string): Promise<void> => invoke("fetch_repo", { repoId });
+/** Fetch + prune all remotes. Resolves true if any ref changed. */
+export const fetchRepo = (repoId: string): Promise<boolean> => invoke("fetch_repo", { repoId });
 
-export const pullRepo = (repoId: string): Promise<void> => invoke("pull_repo", { repoId });
+/**
+ * Pull (ff-only) into the focused worktree; omit worktreePath for the main one.
+ * Resolves false when already up to date (nothing was pulled).
+ */
+export const pullRepo = (repoId: string, worktreePath?: string): Promise<boolean> =>
+  invoke("pull_repo", { repoId, worktreePath });
 
-/** Push `branch` to origin. `setUpstream` publishes it (`-u`); `force` uses `--force-with-lease`. */
+/**
+ * Push `branch` to its upstream's remote (origin when none). `upstream` is the
+ * branch's tracking ref ("origin/main"); `setUpstream` publishes (`-u`); `force`
+ * uses `--force-with-lease`.
+ */
 export const pushBranch = (
   repoId: string,
   branch: string,
+  upstream: string | null,
   setUpstream: boolean,
   force: boolean,
-): Promise<void> => invoke("push_branch", { repoId, branch, setUpstream, force });
+): Promise<void> => invoke("push_branch", { repoId, branch, upstream, setUpstream, force });
 
 /** Subscribe to backend repo-change notifications. Resolves to an unlisten fn. */
 export function onRepoChanged(cb: (repoId: string) => void): Promise<UnlistenFn> {

@@ -69,20 +69,26 @@ pub struct WorktreeInfo {
 }
 
 /// Run git in `repo` with locks disabled and terminal prompts suppressed.
-/// Returns stdout on success, trimmed stderr as the error otherwise.
+/// Returns (stdout, stderr) on success, trimmed stderr as the error otherwise.
+/// LC_ALL=C pins output to English — callers match message text ("Already up
+/// to date", "not fully merged"), which must not vary with the system locale.
 /// `allow_one` also accepts exit status 1 (used by `git diff --no-index`,
 /// which signals "differences found" — not an error — with code 1).
-fn git_ok(repo: &str, args: &[&str], allow_one: bool) -> Result<String, String> {
+fn git_full(repo: &str, args: &[&str], allow_one: bool) -> Result<(String, String), String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(repo)
         .arg("--no-optional-locks")
         .args(args)
         .env("GIT_TERMINAL_PROMPT", "0")
+        .env("LC_ALL", "C")
         .output()
         .map_err(|e| format!("failed to run git: {e}"))?;
     if out.status.success() || (allow_one && out.status.code() == Some(1)) {
-        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        Ok((
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        ))
     } else {
         let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
         Err(if err.is_empty() {
@@ -91,6 +97,10 @@ fn git_ok(repo: &str, args: &[&str], allow_one: bool) -> Result<String, String> 
             err
         })
     }
+}
+
+fn git_ok(repo: &str, args: &[&str], allow_one: bool) -> Result<String, String> {
+    git_full(repo, args, allow_one).map(|(stdout, _)| stdout)
 }
 
 fn git(repo: &str, args: &[&str]) -> Result<String, String> {
@@ -210,6 +220,12 @@ pub fn parse_status_porcelain(out: &str) -> WorkingStatus {
         if x == 'R' || x == 'C' || y == 'R' || y == 'C' {
             entries.next(); // original path of a rename/copy — not a separate entry
         }
+        // Merge conflicts (UU, AA, DD, U?): one "U" entry under unstaged — staging
+        // it is `git add`, i.e. "mark resolved".
+        if x == 'U' || y == 'U' || (x == 'A' && y == 'A') || (x == 'D' && y == 'D') {
+            unstaged.push(FileChange { status: "U".to_string(), path });
+            continue;
+        }
         if x == '?' {
             unstaged.push(FileChange { status: "?".to_string(), path }); // untracked
             continue;
@@ -299,7 +315,9 @@ pub fn get_worktrees(repo: &str) -> Result<Vec<WorktreeInfo>, String> {
 /// True if the worktree at `path` has any staged or unstaged change. Best-effort:
 /// a stale/unreadable path reports clean rather than erroring the whole listing.
 fn is_dirty(path: &str) -> bool {
-    git(path, &["status", "--porcelain", "--untracked-files=all"])
+    // -unormal (not -uall): we only need "is anything dirty", and normal mode
+    // stops descending into untracked directories — much cheaper on big trees.
+    git(path, &["status", "--porcelain", "--untracked-files=normal"])
         .map(|s| !s.trim().is_empty())
         .unwrap_or(false)
 }
@@ -466,34 +484,67 @@ pub fn rename_branch(repo: &str, old_name: &str, new_name: &str) -> Result<(), S
     git(repo, &["branch", "-m", old_name, new_name]).map(|_| ())
 }
 
-/// Uses `-d` (safe). "not fully merged" surfaces as the error; frontend decides.
-pub fn delete_branch(repo: &str, name: &str) -> Result<(), String> {
-    git(repo, &["branch", "-d", name]).map(|_| ())
+/// `-d` (safe) by default; "not fully merged" surfaces as the error and the
+/// frontend re-confirms with `force` (`-D`).
+pub fn delete_branch(repo: &str, name: &str, force: bool) -> Result<(), String> {
+    git(repo, &["branch", if force { "-D" } else { "-d" }, name]).map(|_| ())
 }
 
-pub fn fetch(repo: &str) -> Result<(), String> {
-    git(repo, &["fetch", "--all", "--prune"]).map(|_| ())
+/// Ref updates land on stderr as "<old>..<new>  branch -> origin/branch" (also
+/// "* [new branch] … ->" / "- [deleted] … ->"); a quiet stderr means nothing new.
+fn fetch_changed(stderr: &str) -> bool {
+    stderr.lines().any(|l| l.contains("->"))
 }
 
-pub fn pull(repo: &str) -> Result<(), String> {
-    git(repo, &["pull", "--ff-only"]).map(|_| ())
+/// An up-to-date pull says "Already up to date." on stdout ("Already up-to-date."
+/// pre-2.28); anything else means commits came in.
+fn pull_updated(stdout: &str) -> bool {
+    !stdout.trim_start().starts_with("Already up")
 }
 
-/// Push local `branch` to origin. `set_upstream` publishes it with `-u` (first
-/// push, no tracking yet); `force` uses `--force-with-lease` (safe force — refuses
-/// to clobber if the remote moved unexpectedly). Always explicit `origin <branch>`
-/// so the intended branch is pushed even when it isn't the current checkout.
-/// ponytail: assumes local name == remote branch name (the default); a branch
-/// tracking a differently-named upstream would need a `local:remote` refspec.
-pub fn push(repo: &str, branch: &str, set_upstream: bool, force: bool) -> Result<(), String> {
+/// Fetch + prune all remotes. Ok(true) if any ref changed.
+pub fn fetch(repo: &str) -> Result<bool, String> {
+    git_full(repo, &["fetch", "--all", "--prune"], false).map(|(_, stderr)| fetch_changed(&stderr))
+}
+
+/// Fast-forward-only pull. Ok(false) when there was nothing to pull.
+pub fn pull(repo: &str) -> Result<bool, String> {
+    git(repo, &["pull", "--ff-only"]).map(|out| pull_updated(&out))
+}
+
+/// Derive the push remote + refspec from the branch's tracked upstream
+/// ("upstream/feature/x" → remote "upstream", refspec "local:feature/x").
+/// No upstream (publishing) → origin, same name.
+fn push_target(branch: &str, upstream: Option<&str>) -> (String, String) {
+    match upstream.and_then(|u| u.split_once('/')) {
+        Some((remote, remote_branch)) => {
+            (remote.to_string(), format!("{branch}:{remote_branch}"))
+        }
+        None => ("origin".to_string(), branch.to_string()),
+    }
+}
+
+/// Push local `branch` to its upstream's remote (origin when none). `set_upstream`
+/// publishes it with `-u` (first push, no tracking yet); `force` uses
+/// `--force-with-lease` (safe force — refuses to clobber if the remote moved
+/// unexpectedly). Always an explicit remote + refspec so the intended branch is
+/// pushed even when it isn't the current checkout.
+pub fn push(
+    repo: &str,
+    branch: &str,
+    upstream: Option<&str>,
+    set_upstream: bool,
+    force: bool,
+) -> Result<(), String> {
+    let (remote, refspec) = push_target(branch, upstream);
     let mut args = vec!["push"];
     if set_upstream {
         args.push("--set-upstream");
     } else if force {
         args.push("--force-with-lease");
     }
-    args.push("origin");
-    args.push(branch);
+    args.push(&remote);
+    args.push(&refspec);
     git(repo, &args).map(|_| ())
 }
 
@@ -595,6 +646,46 @@ mod tests {
         let paths = vec!["a.rs".to_string(), "-weird".to_string()];
         assert_eq!(with_paths(&["add"], &paths), vec!["add", "--", "a.rs", "-weird"]);
         assert_eq!(with_paths(&["restore", "--staged"], &[]), vec!["restore", "--staged", "--"]);
+    }
+
+    #[test]
+    fn status_porcelain_unmerged_is_single_conflict_entry() {
+        let out = "UU conflict.rs\u{0}AA both-added.rs\u{0}M  ok.rs\u{0}";
+        let s = parse_status_porcelain(out);
+        assert_eq!(s.staged.len(), 1); // only ok.rs — conflicts never count as staged
+        assert_eq!(s.unstaged.len(), 2);
+        assert_eq!((s.unstaged[0].status.as_str(), s.unstaged[0].path.as_str()), ("U", "conflict.rs"));
+        assert_eq!((s.unstaged[1].status.as_str(), s.unstaged[1].path.as_str()), ("U", "both-added.rs"));
+    }
+
+    #[test]
+    fn pull_and_fetch_detect_no_op() {
+        assert!(!pull_updated("Already up to date.\n"));
+        assert!(!pull_updated("Already up-to-date.\n")); // pre-2.28 spelling
+        assert!(pull_updated("Updating 3238613..3c1620a\nFast-forward\n"));
+        assert!(!fetch_changed(""));
+        assert!(fetch_changed(
+            "From /repo/remote\n   3238613..3c1620a  main       -> origin/main\n"
+        ));
+        assert!(fetch_changed(" - [deleted]         (none)     -> origin/old\n"));
+    }
+
+    #[test]
+    fn push_target_follows_upstream() {
+        assert_eq!(
+            push_target("main", Some("origin/main")),
+            ("origin".to_string(), "main:main".to_string())
+        );
+        // differently-named upstream on a non-origin remote, incl. slashes in the branch
+        assert_eq!(
+            push_target("feat", Some("upstream/feature/x")),
+            ("upstream".to_string(), "feat:feature/x".to_string())
+        );
+        // no upstream (publish) → origin, same name
+        assert_eq!(
+            push_target("new-branch", None),
+            ("origin".to_string(), "new-branch".to_string())
+        );
     }
 
     #[test]

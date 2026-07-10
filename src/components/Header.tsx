@@ -135,6 +135,7 @@ export function Header({
   onToast,
   onResetWindow,
   focusedWorktreeLabel,
+  worktreeArg,
   onClearFocus,
 }: {
   settings: Settings;
@@ -150,6 +151,8 @@ export function Header({
   onResetWindow: () => void;
   /** Branch/short-SHA of the focused worktree, when it isn't the main one. */
   focusedWorktreeLabel?: string;
+  /** Focused worktree path for pull; undefined = the repo's main worktree. */
+  worktreeArg?: string;
   onClearFocus: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -162,8 +165,8 @@ export function Header({
     if (!activeRepo || fetching) return;
     setFetching(true);
     fetchRepo(activeRepo.id)
-      .then(() => {
-        onToast("Fetched");
+      .then((changed) => {
+        onToast(changed ? "Fetched" : "Everything up to date");
         onChanged();
       })
       .catch((e: unknown) => onToast(String(e)))
@@ -173,9 +176,9 @@ export function Header({
   const doPull = () => {
     if (!activeRepo || pulling) return;
     setPulling(true);
-    pullRepo(activeRepo.id)
-      .then(() => {
-        onToast("Pulled");
+    pullRepo(activeRepo.id, worktreeArg)
+      .then((pulled) => {
+        onToast(pulled ? "Pulled" : "Already up to date");
         onChanged();
       })
       .catch((e: unknown) => onToast(String(e)))

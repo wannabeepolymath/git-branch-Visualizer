@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "check": "tsc --noEmit && bun src/lib/graph.check.ts",
     "tauri": "tauri"
   },
   "dependencies": {

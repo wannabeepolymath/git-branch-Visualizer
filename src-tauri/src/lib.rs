@@ -140,14 +140,10 @@ pub fn run() {
             // register the toggle shortcut, so the handler fires on any press —
             // which lets update_settings re-register a new shortcut at runtime.
             {
-                use tauri_plugin_global_shortcut::{Shortcut, ShortcutState};
+                use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-                let shortcut: Shortcut = saved_shortcut
-                    .parse()
-                    .or_else(|_| platform::default_toggle_shortcut().parse())?;
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
-                        .with_shortcut(shortcut)?
                         .with_handler(move |app, _triggered, event| {
                             if event.state() == ShortcutState::Pressed {
                                 if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
@@ -157,6 +153,17 @@ pub fn run() {
                         })
                         .build(),
                 )?;
+                // Register after plugin init: a saved combo that another app now
+                // owns falls back to the default shortcut instead of failing the
+                // whole app launch (registration best-effort either way — the
+                // tray icon still works without a hotkey).
+                let gs = app.handle().global_shortcut();
+                let shortcut: Shortcut = saved_shortcut
+                    .parse()
+                    .or_else(|_| platform::default_toggle_shortcut().parse())?;
+                if gs.register(shortcut).is_err() {
+                    let _ = gs.register(platform::default_toggle_shortcut().parse::<Shortcut>()?);
+                }
             }
 
             Ok(())

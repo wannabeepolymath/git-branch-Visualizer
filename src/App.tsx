@@ -229,6 +229,7 @@ export default function App() {
         onToast={show}
         onResetWindow={resetWindow}
         focusedWorktreeLabel={focusedWorktreeLabel}
+        worktreeArg={worktreeArg}
         onClearFocus={clearFocus}
       />
       {view === "settings" ? (
