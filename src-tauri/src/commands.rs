@@ -368,20 +368,22 @@ pub async fn delete_branch(
     git::delete_branch(&path, &name, force)
 }
 
+/// Ok(true) if any ref changed — the frontend's toast says so honestly.
 #[tauri::command]
-pub async fn fetch_repo(state: State<'_, AppState>, repo_id: String) -> Result<(), String> {
+pub async fn fetch_repo(state: State<'_, AppState>, repo_id: String) -> Result<bool, String> {
     let path = state.repo_path(&repo_id)?;
     git::fetch(&path)
 }
 
 /// Pull runs in the focused worktree — it merges into a working tree, so it must
-/// target the same one the rest of the UI is acting on.
+/// target the same one the rest of the UI is acting on. Ok(false) = already up
+/// to date (nothing was pulled).
 #[tauri::command]
 pub async fn pull_repo(
     state: State<'_, AppState>,
     repo_id: String,
     worktree_path: Option<String>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let path = work_dir(&state, &repo_id, worktree_path)?;
     git::pull(&path)
 }

@@ -375,7 +375,10 @@ function WorkingChanges({
     }).catch((e: unknown) => onToast(String(e)));
 
   // Confirmation on → arm a tick/cross; off → run the action immediately.
-  const arm = (o: NonNullable<typeof pending>) => (confirmActions ? setPending(o) : o.run());
+  // Danger actions (discard — irreversible data loss) ALWAYS arm, regardless of
+  // the setting: the toggle only relaxes reversible actions like stage/unstage.
+  const arm = (o: NonNullable<typeof pending>) =>
+    confirmActions || o.danger ? setPending(o) : o.run();
 
   const toggleDiff = (key: string, f: FileChange, isStaged: boolean) => {
     if (openDiff === key) {

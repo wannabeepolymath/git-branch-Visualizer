@@ -69,20 +69,26 @@ pub struct WorktreeInfo {
 }
 
 /// Run git in `repo` with locks disabled and terminal prompts suppressed.
-/// Returns stdout on success, trimmed stderr as the error otherwise.
+/// Returns (stdout, stderr) on success, trimmed stderr as the error otherwise.
+/// LC_ALL=C pins output to English — callers match message text ("Already up
+/// to date", "not fully merged"), which must not vary with the system locale.
 /// `allow_one` also accepts exit status 1 (used by `git diff --no-index`,
 /// which signals "differences found" — not an error — with code 1).
-fn git_ok(repo: &str, args: &[&str], allow_one: bool) -> Result<String, String> {
+fn git_full(repo: &str, args: &[&str], allow_one: bool) -> Result<(String, String), String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(repo)
         .arg("--no-optional-locks")
         .args(args)
         .env("GIT_TERMINAL_PROMPT", "0")
+        .env("LC_ALL", "C")
         .output()
         .map_err(|e| format!("failed to run git: {e}"))?;
     if out.status.success() || (allow_one && out.status.code() == Some(1)) {
-        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        Ok((
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        ))
     } else {
         let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
         Err(if err.is_empty() {
@@ -91,6 +97,10 @@ fn git_ok(repo: &str, args: &[&str], allow_one: bool) -> Result<String, String> 
             err
         })
     }
+}
+
+fn git_ok(repo: &str, args: &[&str], allow_one: bool) -> Result<String, String> {
+    git_full(repo, args, allow_one).map(|(stdout, _)| stdout)
 }
 
 fn git(repo: &str, args: &[&str]) -> Result<String, String> {
@@ -470,12 +480,26 @@ pub fn delete_branch(repo: &str, name: &str, force: bool) -> Result<(), String> 
     git(repo, &["branch", if force { "-D" } else { "-d" }, name]).map(|_| ())
 }
 
-pub fn fetch(repo: &str) -> Result<(), String> {
-    git(repo, &["fetch", "--all", "--prune"]).map(|_| ())
+/// Ref updates land on stderr as "<old>..<new>  branch -> origin/branch" (also
+/// "* [new branch] … ->" / "- [deleted] … ->"); a quiet stderr means nothing new.
+fn fetch_changed(stderr: &str) -> bool {
+    stderr.lines().any(|l| l.contains("->"))
 }
 
-pub fn pull(repo: &str) -> Result<(), String> {
-    git(repo, &["pull", "--ff-only"]).map(|_| ())
+/// An up-to-date pull says "Already up to date." on stdout ("Already up-to-date."
+/// pre-2.28); anything else means commits came in.
+fn pull_updated(stdout: &str) -> bool {
+    !stdout.trim_start().starts_with("Already up")
+}
+
+/// Fetch + prune all remotes. Ok(true) if any ref changed.
+pub fn fetch(repo: &str) -> Result<bool, String> {
+    git_full(repo, &["fetch", "--all", "--prune"], false).map(|(_, stderr)| fetch_changed(&stderr))
+}
+
+/// Fast-forward-only pull. Ok(false) when there was nothing to pull.
+pub fn pull(repo: &str) -> Result<bool, String> {
+    git(repo, &["pull", "--ff-only"]).map(|out| pull_updated(&out))
 }
 
 /// Derive the push remote + refspec from the branch's tracked upstream
@@ -622,6 +646,18 @@ mod tests {
         assert_eq!(s.unstaged.len(), 2);
         assert_eq!((s.unstaged[0].status.as_str(), s.unstaged[0].path.as_str()), ("U", "conflict.rs"));
         assert_eq!((s.unstaged[1].status.as_str(), s.unstaged[1].path.as_str()), ("U", "both-added.rs"));
+    }
+
+    #[test]
+    fn pull_and_fetch_detect_no_op() {
+        assert!(!pull_updated("Already up to date.\n"));
+        assert!(!pull_updated("Already up-to-date.\n")); // pre-2.28 spelling
+        assert!(pull_updated("Updating 3238613..3c1620a\nFast-forward\n"));
+        assert!(!fetch_changed(""));
+        assert!(fetch_changed(
+            "From /repo/remote\n   3238613..3c1620a  main       -> origin/main\n"
+        ));
+        assert!(fetch_changed(" - [deleted]         (none)     -> origin/old\n"));
     }
 
     #[test]

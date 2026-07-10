@@ -165,8 +165,8 @@ export function Header({
     if (!activeRepo || fetching) return;
     setFetching(true);
     fetchRepo(activeRepo.id)
-      .then(() => {
-        onToast("Fetched");
+      .then((changed) => {
+        onToast(changed ? "Fetched" : "Everything up to date");
         onChanged();
       })
       .catch((e: unknown) => onToast(String(e)))
@@ -177,8 +177,8 @@ export function Header({
     if (!activeRepo || pulling) return;
     setPulling(true);
     pullRepo(activeRepo.id, worktreeArg)
-      .then(() => {
-        onToast("Pulled");
+      .then((pulled) => {
+        onToast(pulled ? "Pulled" : "Already up to date");
         onChanged();
       })
       .catch((e: unknown) => onToast(String(e)))

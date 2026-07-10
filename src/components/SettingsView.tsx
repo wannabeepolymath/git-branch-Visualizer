@@ -358,7 +358,7 @@ export function SettingsView({
               checked={settings.confirmActions}
               onChange={(e) => void patch({ confirmActions: e.target.checked })}
             />
-            Confirm before staging, discarding, and other file actions
+            Confirm before staging and other file actions (destructive ones always ask)
           </label>
         </Section>
 

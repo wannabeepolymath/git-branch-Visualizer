@@ -174,10 +174,14 @@ export const renameBranch = (repoId: string, oldName: string, newName: string): 
 export const deleteBranch = (repoId: string, name: string, force: boolean): Promise<void> =>
   invoke("delete_branch", { repoId, name, force });
 
-export const fetchRepo = (repoId: string): Promise<void> => invoke("fetch_repo", { repoId });
+/** Fetch + prune all remotes. Resolves true if any ref changed. */
+export const fetchRepo = (repoId: string): Promise<boolean> => invoke("fetch_repo", { repoId });
 
-/** Pull (ff-only) into the focused worktree; omit worktreePath for the main one. */
-export const pullRepo = (repoId: string, worktreePath?: string): Promise<void> =>
+/**
+ * Pull (ff-only) into the focused worktree; omit worktreePath for the main one.
+ * Resolves false when already up to date (nothing was pulled).
+ */
+export const pullRepo = (repoId: string, worktreePath?: string): Promise<boolean> =>
   invoke("pull_repo", { repoId, worktreePath });
 
 /**
