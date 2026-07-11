@@ -45,6 +45,13 @@ function formatShortcut(e: KeyboardEvent): string | null {
   return [...mods, key].join("+");
 }
 
+// Display-only: stored format stays Tauri's ("Alt+Shift+G"); Macs read ⌥⇧G.
+const IS_MAC = navigator.platform.startsWith("Mac");
+const MAC_MOD_SYMBOLS: Record<string, string> = { Ctrl: "⌃", Alt: "⌥", Shift: "⇧", Super: "⌘" };
+function displayShortcut(s: string): string {
+  return IS_MAC ? s.split("+").map((p) => MAC_MOD_SYMBOLS[p] ?? p).join("") : s;
+}
+
 const SECTION_IDS = ["repos", "general", "worktrees", "appearance", "graph", "commands"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
@@ -332,6 +339,7 @@ export function SettingsView({
               id="shortcut-recorder"
               type="button"
               aria-label="Global shortcut recorder. Focus and press a key combination to set it."
+              onClick={(e) => e.currentTarget.focus()} // macOS WebKit doesn't focus buttons on click
               onFocus={() => setRecording(true)}
               onBlur={() => setRecording(false)}
               onKeyDown={onShortcutKeyDown}
@@ -339,7 +347,7 @@ export function SettingsView({
                 recording ? "border-accent text-accent" : "border-edge text-fg hover:border-muted"
               }`}
             >
-              {recording ? "Press a key combination… (Esc to cancel)" : settings.shortcut}
+              {recording ? "Press a key combination… (Esc to cancel)" : displayShortcut(settings.shortcut)}
             </button>
           </div>
           <label className="flex items-center gap-2.5 px-3 py-2 text-[12px] text-fg hover:bg-hover">
