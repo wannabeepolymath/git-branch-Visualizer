@@ -14,6 +14,22 @@ The screenshot shows the core flow: filter branches on the left, inspect the col
 - [git](https://git-scm.com) on your PATH (the app shells out to your system git, so your existing SSH keys and credential helpers just work)
 - To build from source: [Rust](https://rustup.rs) (stable) and [Bun](https://bun.sh)
 
+## Install
+
+```sh
+brew install wannabeepolymath/tap/branch-visualizer
+```
+
+Homebrew compiles the app on your machine (first install takes a few minutes), so there's no Gatekeeper prompt and no code-signing requirement. Afterwards, link it into `/Applications` so Spotlight and Login Items can find it:
+
+```sh
+ln -sf "$(brew --prefix branch-visualizer)/Branch Visualizer.app" /Applications
+```
+
+Upgrades come through `brew upgrade` as usual.
+
+> Downloading a prebuilt `.app`/`.dmg` from someone else instead? macOS quarantines downloaded unsigned apps ("app is damaged"). Clear it with `xattr -d com.apple.quarantine "/Applications/Branch Visualizer.app"`, or just build from source.
+
 ## Run from source
 
 ```sh
@@ -29,7 +45,7 @@ The first build compiles all Rust dependencies and takes a few minutes; subseque
 bun run tauri build
 ```
 
-The `.app` bundle and `.dmg` land in `src-tauri/target/release/bundle/`. (Distribution outside your machine needs code signing/notarization — not set up yet.)
+The `.app` bundle and `.dmg` land in `src-tauri/target/release/bundle/`. (Prebuilt distribution outside your machine needs code signing/notarization — install via Homebrew instead, which builds locally.)
 
 ## Using the app
 
