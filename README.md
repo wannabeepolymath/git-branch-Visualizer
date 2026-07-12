@@ -28,6 +28,15 @@ ln -sf "$(brew --prefix branch-visualizer)/Branch Visualizer.app" /Applications
 
 Upgrades come through `brew upgrade` as usual.
 
+Because it compiles on your machine, Homebrew requires reasonably current Xcode Command Line Tools (its requirement, not a version this app pins). If the install fails with `Error: Your Command Line Tools are too outdated`, update them via System Settings → Software Update — or if no update shows:
+
+```sh
+sudo rm -rf /Library/Developer/CommandLineTools
+sudo xcode-select --install
+```
+
+then re-run the install.
+
 > Downloading a prebuilt `.app`/`.dmg` from someone else instead? macOS quarantines downloaded unsigned apps ("app is damaged"). Clear it with `xattr -d com.apple.quarantine "/Applications/Branch Visualizer.app"`, or just build from source.
 
 ## Run from source
