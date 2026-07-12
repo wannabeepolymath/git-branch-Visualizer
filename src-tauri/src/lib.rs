@@ -51,6 +51,7 @@ pub fn run() {
         ))
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
+            commands::quit,
             commands::update_settings,
             commands::recenter_window,
             commands::pick_repo_folder,

@@ -96,6 +96,9 @@ export const getSettings = (): Promise<Settings> => invoke("get_settings");
 /** Re-anchor the popover window under the tray icon. */
 export const recenterWindow = (): Promise<void> => invoke("recenter_window");
 
+/** Quit the app entirely (menu-bar apps have no other quit affordance). */
+export const quitApp = (): Promise<void> => invoke("quit");
+
 export const updateSettings = (settings: Settings): Promise<Settings> =>
   invoke("update_settings", { settings });
 

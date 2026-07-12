@@ -47,6 +47,13 @@ pub fn get_settings(state: State<AppState>) -> Result<Settings, String> {
     state.snapshot()
 }
 
+/// Quit the app. The popover is menu-bar-only (no Dock icon, no app menu), so
+/// the Settings button calling this is the only in-app way to quit.
+#[tauri::command]
+pub fn quit(app: AppHandle) {
+    app.exit(0);
+}
+
 /// Reset the popover to its default size and re-anchor it under the tray icon
 /// (manual override for when the user has dragged/resized it away). See
 /// `toggle_popover`. Resize happens first because TrayCenter's x depends on the

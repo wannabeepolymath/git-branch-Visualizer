@@ -1,6 +1,6 @@
-import { useRef, useState, type ReactNode } from "react";
-import { fetchRepo, pullRepo, type RepoInfo, type Settings } from "../lib/ipc";
-import { useDismiss } from "./ContextMenu";
+import { useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { fetchRepo, pullRepo, quitApp, type RepoInfo, type Settings } from "../lib/ipc";
+import { PromptPopover, useDismiss } from "./ContextMenu";
 
 function ChevronDownIcon() {
   return (
@@ -78,6 +78,15 @@ function RecenterIcon() {
   );
 }
 
+function PowerIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2v10" />
+      <path d="M18.4 6.6a9 9 0 1 1-12.77.04" />
+    </svg>
+  );
+}
+
 function GearIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -102,7 +111,7 @@ function IconButton({
   active?: boolean;
   disabled?: boolean;
   tipLeft?: boolean; // align tooltip to the left edge (for buttons near the window's left)
-  onClick: () => void;
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
 }) {
   return (
@@ -158,6 +167,7 @@ export function Header({
   const [open, setOpen] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [pulling, setPulling] = useState(false);
+  const [quitConfirm, setQuitConfirm] = useState<{ x: number; y: number } | null>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
   useDismiss(switcherRef, () => setOpen(false));
 
@@ -274,6 +284,26 @@ export function Header({
       )}
 
       <div data-tauri-drag-region="" className="h-full flex-1" />
+
+      {inSettings && (
+        <IconButton
+          label="Quit Branch Visualizer"
+          onClick={(e) => setQuitConfirm({ x: e.clientX, y: e.clientY })}
+        >
+          <PowerIcon />
+        </IconButton>
+      )}
+      {quitConfirm && (
+        <PromptPopover
+          x={quitConfirm.x}
+          y={quitConfirm.y}
+          title="Quit Branch Visualizer?"
+          confirmLabel="Quit"
+          danger
+          onClose={() => setQuitConfirm(null)}
+          onConfirm={() => quitApp()}
+        />
+      )}
 
       {!inSettings && (
         <>
