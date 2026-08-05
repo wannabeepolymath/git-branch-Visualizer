@@ -37,7 +37,7 @@ sudo xcode-select --install
 
 then re-run the install.
 
-> Downloading a prebuilt `.app`/`.dmg` from someone else instead? macOS quarantines downloaded unsigned apps ("app is damaged"). Clear it with `xattr -d com.apple.quarantine "/Applications/Branch Visualizer.app"`, or just build from source.
+> Downloading a prebuilt `.app`/`.dmg` from someone else instead? macOS quarantines downloaded unsigned apps ("app is damaged"). Clear it with `xattr -dr com.apple.quarantine "/Applications/Branch Visualizer.app"` (recursive — the flag lands on files inside the bundle too), or just build from source.
 
 ## Run from source
 
@@ -54,7 +54,7 @@ The first build compiles all Rust dependencies and takes a few minutes; subseque
 bun run tauri build
 ```
 
-The `.app` bundle and `.dmg` land in `src-tauri/target/release/bundle/`. (Prebuilt distribution outside your machine needs code signing/notarization — install via Homebrew instead, which builds locally.)
+The `.app` bundle and `.dmg` land in `src-tauri/target/release/bundle/`. Both are built for the host architecture only and are adhoc-signed, so they run on the machine that built them but fail Gatekeeper anywhere else. Prebuilt distribution needs a Developer ID certificate and notarization; until then, Homebrew building locally is the distribution path.
 
 ## Using the app
 
@@ -77,7 +77,8 @@ The app lives in the **menu bar only** — no Dock icon, no regular window. Open
 
 ### All features
 
-- Menu-bar-only macOS app with no Dock icon.
+- Menu-bar-only macOS app with no Dock icon, registered as an accessory before launch so no icon ever flashes.
+- Rounded popover with a native drop shadow, drawn on a transparent window rather than a plain rectangle.
 - Tray icon toggle plus configurable global shortcut.
 - Popover closes on blur and can be reset to its default size/position.
 - Repository picker, add-repository flow, active-repo switching, and repository removal from Settings.
@@ -135,7 +136,9 @@ Settings are stored in `~/Library/Application Support/com.branchvisualizer.app/s
 bunx tsc --noEmit             # typecheck frontend
 bun src/lib/graph.check.ts    # graph lane-layout self-checks
 cd src-tauri && cargo check   # compile-check Rust
-cd src-tauri && cargo test    # git output parser tests
+cd src-tauri && cargo test    # git output parsing, settings migration, open-target expansion
 ```
 
-Layout: `src/` is the React UI (all platform-agnostic; talks to the backend only through the typed IPC wrappers in `src/lib/ipc.ts`), `src-tauri/src/` is the Rust shell — `git.rs` (run/parse git), `state.rs` (settings), `watcher.rs` (live refresh), `commands.rs` (IPC surface), and `platform.rs`, the **only** file with OS-specific code, which is what will make the Windows/Linux ports cheap.
+Layout: `src/` is the React UI (all platform-agnostic; talks to the backend only through the typed IPC wrappers in `src/lib/ipc.ts`), `src-tauri/src/` is the Rust shell — `git.rs` (run/parse git), `state.rs` (settings), `watcher.rs` (live refresh), `commands.rs` (IPC surface), and `platform.rs`, the **only** source file with OS-specific code, which is what will make the Windows/Linux ports cheap.
+
+Three pieces of macOS-specific setup live outside `platform.rs`, and a port has to account for them: `src-tauri/Info.plist` (`LSUIElement`, bundled only on macOS), and the `macOSPrivateApi` + `transparent` keys in `tauri.conf.json` that back the rounded popover. Transparency on Linux depends on a running compositor, so the rounded corners are the one piece of chrome that will need a per-platform answer rather than a straight port.
