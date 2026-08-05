@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Registers the app as a menu-bar-only accessory before AppKit launches it, so
+	  the Dock icon never appears at all. platform::hide_from_dock() does the same
+	  thing at runtime, but only after launch — which is why the icon could blink
+	  into the Dock and out. That call stays as the `tauri dev` path (dev runs the
+	  bare binary and never reads this bundled plist).
+
+	  The tauri bundler auto-merges any Info.plist sitting next to tauri.conf.json.
+	-->
+	<key>LSUIElement</key>
+	<true/>
+</dict>
+</plist>

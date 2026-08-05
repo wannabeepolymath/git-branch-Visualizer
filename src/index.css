@@ -238,11 +238,28 @@ body,
   margin: 0;
 }
 
+/*
+ * The native window is transparent (see tauri.conf.json) so #root can draw the
+ * rounded popover shape itself. macOS derives the window's drop shadow from the
+ * opaque pixels we paint, so rounding #root rounds the shadow with it.
+ * html/body must stay fully transparent or they'd square off the corners.
+ */
+html,
+body {
+  background: transparent;
+}
+
 body {
   overflow: hidden;
   cursor: default;
   -webkit-font-smoothing: antialiased;
   font-family: var(--app-font);
-  background: var(--bg);
   color: var(--fg);
+}
+
+#root {
+  background: var(--bg);
+  /* macOS window-corner convention, deliberately not a per-theme --radius-*. */
+  border-radius: 10px;
+  overflow: hidden;
 }
