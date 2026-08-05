@@ -6,6 +6,7 @@ import {
   getSettings,
   normalizeTheme,
   onRepoChanged,
+  onWindowShown,
   pickRepoFolder,
   recenterWindow,
   setActiveRepo,
@@ -132,7 +133,16 @@ export default function App() {
     let live = true;
     getBranches(repoId)
       .then((b) => {
-        if (live) setBranches(b);
+        if (!live) return;
+        setBranches(b);
+        // Drop refs whose branch is gone (deleted or renamed). Otherwise the graph
+        // keeps filtering on a dead name — every refresh fails with a git fatal
+        // while still rendering the old commits, and no sidebar row is highlighted
+        // to show what the stuck filter even is.
+        const names = new Set(b.map((x) => x.name));
+        setSelectedRefs((cur) =>
+          cur.every((r) => names.has(r)) ? cur : cur.filter((r) => names.has(r)),
+        );
       })
       .catch((e: unknown) => show(String(e)));
     return () => {
@@ -172,6 +182,23 @@ export default function App() {
     void onRepoChanged((changedId) => {
       if (changedId === repoIdRef.current) refresh();
     }).then((f) => {
+      if (dead) f();
+      else unlisten = f;
+    });
+    return () => {
+      dead = true;
+      unlisten?.();
+    };
+  }, [refresh]);
+
+  // Reopening the popover must re-read the repo: the window is hidden, not
+  // destroyed, so without this nothing re-renders — relative times stay frozen at
+  // whatever they were when it was last closed, and working-tree edits (which the
+  // .git watcher never sees) never show up at all.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let dead = false;
+    void onWindowShown(refresh).then((f) => {
       if (dead) f();
       else unlisten = f;
     });

@@ -18,11 +18,17 @@ pub fn run(template: &str, path: &str) -> Result<(), String> {
     let (program, args) = tokens
         .split_first()
         .ok_or_else(|| "empty open command".to_string())?;
-    std::process::Command::new(program)
+    let mut child = std::process::Command::new(program)
         .args(args)
         .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("failed to run '{program}': {e}"))
+        .map_err(|e| format!("failed to run '{program}': {e}"))?;
+    // Reap off-thread: nothing waits on a dropped Child, so every launched editor
+    // would otherwise sit in the process table as a zombie for the app's lifetime.
+    // ponytail: one short-lived thread per click, which ends when the editor does.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
 }
 
 #[cfg(test)]

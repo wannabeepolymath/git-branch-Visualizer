@@ -85,6 +85,21 @@ pub fn start(
     Ok(())
 }
 
+/// Start a watcher only if this repo has none. `start` records a watcher solely on
+/// success, so a missing entry means the last attempt failed (repo folder not
+/// reachable at launch — external volume, renamed dir) and that repo would get no
+/// `repo-changed` events for the whole session. Called from the refresh path so it
+/// self-heals; a healthy watcher costs one map lookup and is never restarted.
+pub fn ensure(app: &AppHandle, state: &AppState, repo_id: &str, repo_path: &str) {
+    let watched = match state.watchers.lock() {
+        Ok(w) => w.contains_key(repo_id),
+        Err(_) => true, // poisoned: leave it alone
+    };
+    if !watched {
+        let _ = start(app, state, repo_id, repo_path);
+    }
+}
+
 /// Stop the watcher for `repo_id` (dropping it ends the debounce thread).
 pub fn stop(state: &AppState, repo_id: &str) {
     if let Ok(mut w) = state.watchers.lock() {

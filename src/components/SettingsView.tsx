@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   getSettings,
   normalizeTheme,
@@ -226,10 +226,25 @@ export function SettingsView({
   const [targets, setTargets] = useState<OpenTarget[]>(settings.openTargets);
   useEffect(() => setTargets(settings.openTargets), [settings.openTargets]);
 
-  const patch = (next: Partial<Settings>) =>
-    updateSettings({ ...settings, ...next })
+  // A write replaces the whole settings blob, so two writes built from the same
+  // stale `settings` prop silently revert each other — editing a target's command
+  // and then clicking "Add target" is the everyday case (blur fires, then click,
+  // both merging into the pre-edit snapshot). Queue writes and rebuild each one
+  // from what the previous write actually persisted. Pass a function for any patch
+  // derived from current values.
+  const writeQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const patch = (next: Partial<Settings> | ((cur: Settings) => Partial<Settings>)) => {
+    const done = writeQueue.current
+      .catch(() => {}) // a failed write must not wedge the queue
+      .then(getSettings)
+      .then((cur) =>
+        updateSettings({ ...cur, ...(typeof next === "function" ? next(cur) : next) }),
+      )
       .then(onSettingsChange)
       .catch((e: unknown) => onToast(String(e)));
+    writeQueue.current = done;
+    return done;
+  };
 
   const editTarget = (i: number, next: Partial<OpenTarget>) =>
     setTargets((ts) => ts.map((t, j) => (j === i ? { ...t, ...next } : t)));
@@ -241,22 +256,23 @@ export function SettingsView({
   };
 
   const addTarget = () =>
-    void patch({
+    void patch((cur) => ({
       openTargets: [
-        ...settings.openTargets,
+        ...cur.openTargets,
         { id: crypto.randomUUID(), name: "New", command: "code {path}" },
       ],
-    });
+    }));
 
-  const removeOpenTarget = (id: string) => {
-    const next = settings.openTargets.filter((t) => t.id !== id);
-    void patch({
-      openTargets: next,
-      // Keep the default pointing at something real.
-      defaultOpenTarget:
-        settings.defaultOpenTarget === id ? (next[0]?.id ?? null) : settings.defaultOpenTarget,
+  const removeOpenTarget = (id: string) =>
+    void patch((cur) => {
+      const next = cur.openTargets.filter((t) => t.id !== id);
+      return {
+        openTargets: next,
+        // Keep the default pointing at something real.
+        defaultOpenTarget:
+          cur.defaultOpenTarget === id ? (next[0]?.id ?? null) : cur.defaultOpenTarget,
+      };
     });
-  };
 
   const commitCommitsPerPage = () => {
     const parsed = Math.round(Number(cppText));

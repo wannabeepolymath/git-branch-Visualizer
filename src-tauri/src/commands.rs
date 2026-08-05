@@ -215,10 +215,14 @@ pub fn set_active_repo(state: State<AppState>, repo_id: String) -> Result<(), St
 
 #[tauri::command]
 pub async fn get_branches(
+    app: AppHandle,
     state: State<'_, AppState>,
     repo_id: String,
 ) -> Result<Vec<git::BranchInfo>, String> {
     let path = state.repo_path(&repo_id)?;
+    // Retry a watcher that failed to start (repo was unreachable at launch) — this
+    // runs on every refresh, so the repo starts emitting events as soon as it's back.
+    watcher::ensure(&app, &state, &repo_id, &path);
     let show_remotes = state.snapshot()?.show_remote_branches;
     git::get_branches(&path, show_remotes)
 }

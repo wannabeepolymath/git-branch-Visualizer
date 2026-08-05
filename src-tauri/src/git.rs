@@ -72,6 +72,8 @@ pub struct WorktreeInfo {
 /// Returns (stdout, stderr) on success, trimmed stderr as the error otherwise.
 /// LC_ALL=C pins output to English — callers match message text ("Already up
 /// to date", "not fully merged"), which must not vary with the system locale.
+/// core.quotepath=false stops git C-quoting non-ASCII paths ("caf\303\251.txt"),
+/// which would otherwise be fed back to git as a pathspec and match nothing.
 /// `allow_one` also accepts exit status 1 (used by `git diff --no-index`,
 /// which signals "differences found" — not an error — with code 1).
 fn git_full(repo: &str, args: &[&str], allow_one: bool) -> Result<(String, String), String> {
@@ -79,6 +81,7 @@ fn git_full(repo: &str, args: &[&str], allow_one: bool) -> Result<(String, Strin
         .arg("-C")
         .arg(repo)
         .arg("--no-optional-locks")
+        .args(["-c", "core.quotepath=false"]) // must precede the subcommand
         .args(args)
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("LC_ALL", "C")
@@ -105,6 +108,11 @@ fn git_ok(repo: &str, args: &[&str], allow_one: bool) -> Result<String, String> 
 
 fn git(repo: &str, args: &[&str]) -> Result<String, String> {
     git_ok(repo, args, false)
+}
+
+/// `git` for argv that has to be owned (pathspecs and refs built at runtime).
+fn git_owned(repo: &str, args: &[String]) -> Result<String, String> {
+    git(repo, &args.iter().map(String::as_str).collect::<Vec<_>>())
 }
 
 /// git version of a for-each-ref line: fields separated by NUL.
@@ -135,7 +143,8 @@ pub fn parse_upstream_track(track: &str) -> (u32, u32) {
 
 /// Parse one NUL-separated for-each-ref line into a BranchInfo.
 /// `is_remote` sets the flag and suppresses upstream/ahead/behind for remotes.
-/// Returns None for malformed lines or remote HEAD pointers (e.g. origin/HEAD).
+/// Returns None for malformed lines (incl. an unparseable date — dropping the
+/// branch beats rendering a fabricated 1970 timestamp) or remote HEAD pointers.
 pub fn parse_for_each_ref_line(line: &str, is_remote: bool) -> Option<BranchInfo> {
     let f: Vec<&str> = line.split('\u{0}').collect();
     if f.len() < 6 {
@@ -163,17 +172,19 @@ pub fn parse_for_each_ref_line(line: &str, is_remote: bool) -> Option<BranchInfo
         upstream,
         ahead,
         behind,
-        last_commit_time: f[4].parse().unwrap_or(0),
+        last_commit_time: f[4].parse().ok()?,
         last_commit_subject: f[5].to_string(),
     })
 }
 
-/// Clean %D ref decorations: drop "HEAD"/"HEAD ->", tags as "tag:v1.0".
+/// Clean %D ref decorations: strip the "HEAD -> " prefix, tags as "tag:v1.0".
+/// A bare "HEAD" is kept — %D only emits it when HEAD is detached, and that pill
+/// is the only place the user can see where a detached checkout landed.
 fn clean_refs(d: &str) -> Vec<String> {
     d.split(", ")
         .filter_map(|r| {
             let r = r.trim();
-            if r.is_empty() || r == "HEAD" {
+            if r.is_empty() {
                 None
             } else if let Some(rest) = r.strip_prefix("HEAD -> ") {
                 Some(rest.to_string())
@@ -187,6 +198,7 @@ fn clean_refs(d: &str) -> Vec<String> {
 }
 
 /// Parse one NUL-separated `git log` line (LOG_FORMAT) into a CommitInfo.
+/// None for malformed lines, including an unparseable commit date.
 pub fn parse_log_line(line: &str) -> Option<CommitInfo> {
     let f: Vec<&str> = line.splitn(7, '\u{0}').collect();
     if f.len() < 7 {
@@ -198,7 +210,7 @@ pub fn parse_log_line(line: &str) -> Option<CommitInfo> {
         subject: f[2].to_string(),
         author_name: f[3].to_string(),
         author_email: f[4].to_string(),
-        timestamp: f[5].parse().unwrap_or(0),
+        timestamp: f[5].parse().ok()?,
         refs: clean_refs(f[6]),
     })
 }
@@ -238,6 +250,27 @@ pub fn parse_status_porcelain(out: &str) -> WorkingStatus {
         }
     }
     WorkingStatus { staged, unstaged }
+}
+
+/// Staged rename/copy pairs from `git status --porcelain=v1 -z` as (new, original).
+/// The frontend only ever sees the new path, but `git restore --staged <new>` alone
+/// leaves the original staged as a deletion — both sides have to be restored.
+pub fn parse_staged_rename_pairs(out: &str) -> Vec<(String, String)> {
+    let mut pairs = Vec::new();
+    let mut entries = out.split('\u{0}');
+    while let Some(entry) = entries.next() {
+        if entry.len() < 4 {
+            continue;
+        }
+        let (x, y) = (entry.as_bytes()[0] as char, entry.as_bytes()[1] as char);
+        if x == 'R' || x == 'C' || y == 'R' || y == 'C' {
+            let Some(orig) = entries.next() else { break };
+            if x == 'R' || x == 'C' {
+                pairs.push((entry[3..].to_string(), orig.to_string()));
+            }
+        }
+    }
+    pairs
 }
 
 /// Parse `git worktree list --porcelain` into records. Records are separated by a
@@ -344,6 +377,26 @@ pub fn get_branches(repo: &str, include_remotes: bool) -> Result<Vec<BranchInfo>
     Ok(out)
 }
 
+/// argv for `git log`. The trailing `--` is load-bearing: without it a ref that
+/// also names a path (branch "docs" + a docs/ directory) either errors as
+/// ambiguous or, once the branch is gone, silently becomes a pathspec filter.
+fn log_args(refs: &[String], skip: u32, limit: u32) -> Vec<String> {
+    let mut args = vec![
+        "log".to_string(),
+        format!("--skip={skip}"),
+        format!("--max-count={limit}"),
+        "--date-order".to_string(),
+        format!("--format={LOG_FORMAT}"),
+    ];
+    if refs.is_empty() {
+        args.extend(["--branches", "--remotes", "--tags"].map(String::from));
+    } else {
+        args.extend(refs.iter().cloned());
+    }
+    args.push("--".to_string());
+    args
+}
+
 /// Log the union of the given refs. Empty `refs` means all branches/remotes/tags.
 pub fn get_log(
     repo: &str,
@@ -351,16 +404,7 @@ pub fn get_log(
     skip: u32,
     limit: u32,
 ) -> Result<Vec<CommitInfo>, String> {
-    let skip_arg = format!("--skip={skip}");
-    let max_arg = format!("--max-count={limit}");
-    let fmt_arg = format!("--format={LOG_FORMAT}");
-    let mut args = vec!["log", &skip_arg, &max_arg, "--date-order", &fmt_arg];
-    if refs.is_empty() {
-        args.extend_from_slice(&["--branches", "--remotes", "--tags"]);
-    } else {
-        args.extend(refs.iter().map(String::as_str));
-    }
-    let out = git(repo, &args)?;
+    let out = git_owned(repo, &log_args(refs, skip, limit))?;
     Ok(out.lines().filter_map(parse_log_line).collect())
 }
 
@@ -377,7 +421,7 @@ pub fn get_commit(repo: &str, hash: &str) -> Result<CommitDetail, String> {
         subject: f[2].to_string(),
         author_name: f[3].to_string(),
         author_email: f[4].to_string(),
-        timestamp: f[5].parse().unwrap_or(0),
+        timestamp: f[5].parse().map_err(|_| "unexpected git show output".to_string())?,
         refs: clean_refs(f[6]),
     };
     let body = f[7].trim_end().to_string();
@@ -386,6 +430,9 @@ pub fn get_commit(repo: &str, hash: &str) -> Result<CommitDetail, String> {
     // --diff-merges=first-parent: plain `git show` uses the combined diff for
     // merges, which lists (almost) no files; the diff vs the first parent is
     // what the detail panel should show. No effect on non-merge commits.
+    // ponytail: line-based parse. core.quotepath=false (see git_full) gives
+    // verbatim non-ASCII paths, but git still escapes control characters, so a
+    // filename containing a newline still breaks this — pass -z if that shows up.
     let names = git(
         repo,
         &["show", "--name-status", "--diff-merges=first-parent", "--format=", hash],
@@ -426,8 +473,9 @@ pub fn diff_file(repo: &str, path: &str, staged: bool, untracked: bool) -> Resul
     if staged {
         args.push("--cached");
     }
+    let spec = literal(path);
     args.push("--");
-    args.push(path);
+    args.push(&spec);
     git(repo, &args)
 }
 
@@ -435,17 +483,25 @@ pub fn diff_file(repo: &str, path: &str, staged: bool, untracked: bool) -> Resul
 /// `git show` handles root commits (no parent) for free; first-parent keeps
 /// merge diffs consistent with the file list from `get_commit`.
 pub fn diff_commit_file(repo: &str, hash: &str, path: &str) -> Result<String, String> {
+    let spec = literal(path);
     git(
         repo,
-        &["show", "--format=", "--diff-merges=first-parent", hash, "--", path],
+        &["show", "--format=", "--diff-merges=first-parent", hash, "--", &spec],
     )
 }
 
-/// Build `[cmd..., "--", paths...]` — the `--` stops paths being read as flags.
-fn with_paths<'a>(head: &[&'a str], paths: &'a [String]) -> Vec<&'a str> {
-    let mut args: Vec<&str> = head.to_vec();
-    args.push("--");
-    args.extend(paths.iter().map(String::as_str));
+/// Wrap a path as an exact pathspec. `--` only stops option parsing — git still
+/// globs pathspecs, so a file literally named "report[1].txt" would otherwise
+/// also match (and stage, revert or delete) its sibling "report1.txt".
+fn literal(path: &str) -> String {
+    format!(":(literal){path}")
+}
+
+/// Build `[cmd..., "--", literal pathspecs...]`.
+fn with_paths(head: &[&str], paths: &[String]) -> Vec<String> {
+    let mut args: Vec<String> = head.iter().map(|s| s.to_string()).collect();
+    args.push("--".to_string());
+    args.extend(paths.iter().map(|p| literal(p)));
     args
 }
 
@@ -453,23 +509,36 @@ fn with_paths<'a>(head: &[&'a str], paths: &'a [String]) -> Vec<&'a str> {
 
 /// Stage paths into the index (`git add` — covers modified, deleted, untracked).
 pub fn stage(repo: &str, paths: &[String]) -> Result<(), String> {
-    git(repo, &with_paths(&["add"], paths)).map(|_| ())
+    git_owned(repo, &with_paths(&["add"], paths)).map(|_| ())
 }
 
-/// Unstage paths, leaving worktree contents untouched.
+/// Unstage paths, leaving worktree contents untouched. A staged rename is one
+/// index entry with two paths but the frontend only knows the new one, so we
+/// re-read status here and restore the original alongside it — otherwise the
+/// original is left staged as a deletion of a file the user never touched.
 pub fn unstage(repo: &str, paths: &[String]) -> Result<(), String> {
-    git(repo, &with_paths(&["restore", "--staged"], paths)).map(|_| ())
+    let status = git(repo, &["status", "--porcelain=v1", "-z", "--untracked-files=no"])?;
+    let mut all = paths.to_vec();
+    for (new, orig) in parse_staged_rename_pairs(&status) {
+        if paths.contains(&new) && !all.contains(&orig) {
+            all.push(orig);
+        }
+    }
+    git_owned(repo, &with_paths(&["restore", "--staged"], &all)).map(|_| ())
 }
 
 /// Discard worktree changes. `untracked` files are removed from disk (`git clean`);
 /// tracked files are reverted to their index contents (`git restore`). Destructive.
 pub fn discard(repo: &str, paths: &[String], untracked: bool) -> Result<(), String> {
     let head: &[&str] = if untracked { &["clean", "-f"] } else { &["restore"] };
-    git(repo, &with_paths(head, paths)).map(|_| ())
+    git_owned(repo, &with_paths(head, paths)).map(|_| ())
 }
 
+/// Check out a ref. The trailing `--` forces `ref_name` to be read as a revision:
+/// a branch that also names a directory ("docs") is otherwise rejected as
+/// ambiguous. DWIM (creating a local branch tracking origin/<name>) still applies.
 pub fn checkout(repo: &str, ref_name: &str) -> Result<(), String> {
-    git(repo, &["checkout", ref_name]).map(|_| ())
+    git(repo, &["checkout", ref_name, "--"]).map(|_| ())
 }
 
 pub fn create_branch(repo: &str, name: &str, from_ref: &str) -> Result<(), String> {
@@ -514,13 +583,18 @@ pub fn pull(repo: &str) -> Result<bool, String> {
 
 /// Derive the push remote + refspec from the branch's tracked upstream
 /// ("upstream/feature/x" → remote "upstream", refspec "local:feature/x").
-/// No upstream (publishing) → origin, same name.
-fn push_target(branch: &str, upstream: Option<&str>) -> (String, String) {
-    match upstream.and_then(|u| u.split_once('/')) {
-        Some((remote, remote_branch)) => {
-            (remote.to_string(), format!("{branch}:{remote_branch}"))
-        }
-        None => ("origin".to_string(), branch.to_string()),
+/// No upstream (publishing) → origin, same name. A slashless upstream is a
+/// *local* branch (branch.<n>.remote = "."), which names no remote at all —
+/// erroring beats quietly pushing to origin/<branch> instead.
+fn push_target(branch: &str, upstream: Option<&str>) -> Result<(String, String), String> {
+    match upstream {
+        Some(u) => match u.split_once('/') {
+            Some((remote, remote_branch)) => {
+                Ok((remote.to_string(), format!("{branch}:{remote_branch}")))
+            }
+            None => Err(format!("'{branch}' tracks local branch '{u}', not a remote")),
+        },
+        None => Ok(("origin".to_string(), branch.to_string())),
     }
 }
 
@@ -536,7 +610,7 @@ pub fn push(
     set_upstream: bool,
     force: bool,
 ) -> Result<(), String> {
-    let (remote, refspec) = push_target(branch, upstream);
+    let (remote, refspec) = push_target(branch, upstream)?;
     let mut args = vec!["push"];
     if set_upstream {
         args.push("--set-upstream");
@@ -642,10 +716,76 @@ mod tests {
     }
 
     #[test]
-    fn with_paths_inserts_separator() {
-        let paths = vec!["a.rs".to_string(), "-weird".to_string()];
-        assert_eq!(with_paths(&["add"], &paths), vec!["add", "--", "a.rs", "-weird"]);
+    fn with_paths_inserts_separator_and_literal_pathspecs() {
+        // glob metacharacters must not survive as a pattern — ":(literal)" pins them
+        let paths = vec!["report[1].txt".to_string(), "-weird".to_string()];
+        assert_eq!(
+            with_paths(&["add"], &paths),
+            vec!["add", "--", ":(literal)report[1].txt", ":(literal)-weird"]
+        );
         assert_eq!(with_paths(&["restore", "--staged"], &[]), vec!["restore", "--staged", "--"]);
+        assert_eq!(with_paths(&["clean", "-f"], &["a*.rs".to_string()]), vec![
+            "clean",
+            "-f",
+            "--",
+            ":(literal)a*.rs"
+        ]);
+    }
+
+    #[test]
+    fn staged_rename_pairs_extracted() {
+        // staged rename + staged copy + a plain modify (no pair), NUL-separated
+        let out = "R  dst.rs\u{0}src.rs\u{0}C  copy.rs\u{0}orig.rs\u{0}M  ok.rs\u{0}";
+        assert_eq!(
+            parse_staged_rename_pairs(out),
+            vec![
+                ("dst.rs".to_string(), "src.rs".to_string()),
+                ("copy.rs".to_string(), "orig.rs".to_string()),
+            ]
+        );
+        // a worktree-side rename is not a staged pair, but still consumes its
+        // original path so the following entry is not misread
+        let out = " R wt-dst.rs\u{0}wt-src.rs\u{0}M  after.rs\u{0}";
+        assert!(parse_staged_rename_pairs(out).is_empty());
+        assert!(parse_staged_rename_pairs("").is_empty());
+    }
+
+    #[test]
+    fn log_args_terminate_refs() {
+        // explicit refs: "--" keeps a path-shaped branch ("docs") from becoming a pathspec
+        assert_eq!(
+            log_args(&["docs".to_string()], 0, 200),
+            vec![
+                "log",
+                "--skip=0",
+                "--max-count=200",
+                "--date-order",
+                &format!("--format={LOG_FORMAT}"),
+                "docs",
+                "--"
+            ]
+        );
+        let all = log_args(&[], 10, 50);
+        assert_eq!(&all[1..=2], ["--skip=10", "--max-count=50"]);
+        assert_eq!(&all[all.len() - 4..], ["--branches", "--remotes", "--tags", "--"]);
+    }
+
+    #[test]
+    fn detached_head_is_kept_as_a_ref() {
+        // %D emits a bare "HEAD" only when detached — the only marker the UI gets
+        let line = "abc\u{0}p1\u{0}s\u{0}A\u{0}a@x.io\u{0}1700000003\u{0}HEAD, tag: v2";
+        assert_eq!(parse_log_line(line).unwrap().refs, vec!["HEAD", "tag:v2"]);
+        // attached HEAD is unchanged: "HEAD -> main" still collapses to "main"
+        let line = "abc\u{0}p1\u{0}s\u{0}A\u{0}a@x.io\u{0}1700000003\u{0}HEAD -> main";
+        assert_eq!(parse_log_line(line).unwrap().refs, vec!["main"]);
+    }
+
+    #[test]
+    fn bad_timestamp_is_dropped_not_faked() {
+        let line = "abc\u{0}p1\u{0}s\u{0}A\u{0}a@x.io\u{0}not-a-date\u{0}";
+        assert!(parse_log_line(line).is_none());
+        let line = " \u{0}main\u{0}\u{0}\u{0}\u{0}subject"; // empty committerdate
+        assert!(parse_for_each_ref_line(line, false).is_none());
     }
 
     #[test]
@@ -673,19 +813,21 @@ mod tests {
     #[test]
     fn push_target_follows_upstream() {
         assert_eq!(
-            push_target("main", Some("origin/main")),
+            push_target("main", Some("origin/main")).unwrap(),
             ("origin".to_string(), "main:main".to_string())
         );
         // differently-named upstream on a non-origin remote, incl. slashes in the branch
         assert_eq!(
-            push_target("feat", Some("upstream/feature/x")),
+            push_target("feat", Some("upstream/feature/x")).unwrap(),
             ("upstream".to_string(), "feat:feature/x".to_string())
         );
         // no upstream (publish) → origin, same name
         assert_eq!(
-            push_target("new-branch", None),
+            push_target("new-branch", None).unwrap(),
             ("origin".to_string(), "new-branch".to_string())
         );
+        // upstream is a local branch (no remote in it) → error, never origin
+        assert!(push_target("feat", Some("main")).is_err());
     }
 
     #[test]

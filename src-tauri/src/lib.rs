@@ -107,6 +107,19 @@ pub fn run() {
                 let s = app_state.settings.lock().unwrap();
                 s.shortcut.clone()
             };
+            // The OS is the source of truth for autostart: update_settings only
+            // writes it when the checkbox changes, so a LaunchAgent removed outside
+            // the app would leave the checkbox lying forever. Best-effort.
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                if let Ok(enabled) = app.autolaunch().is_enabled() {
+                    let mut s = app_state.settings.lock().unwrap();
+                    if s.launch_at_login != enabled {
+                        s.launch_at_login = enabled;
+                        let _ = state::persist(&app_state.config_path, &s);
+                    }
+                }
+            }
             // Start watchers for every already-registered repo.
             {
                 let s = app_state.settings.lock().unwrap();

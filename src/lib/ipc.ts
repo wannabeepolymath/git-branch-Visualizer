@@ -2,6 +2,7 @@
 // string error — callers surface it via the toast.
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export interface RepoInfo {
   id: string;
@@ -207,4 +208,16 @@ export const pushBranch = (
 /** Subscribe to backend repo-change notifications. Resolves to an unlisten fn. */
 export function onRepoChanged(cb: (repoId: string) => void): Promise<UnlistenFn> {
   return listen<{ repoId: string }>("repo-changed", (e) => cb(e.payload.repoId));
+}
+
+/**
+ * Fires when the popover is shown. The window is only hidden, never destroyed, so
+ * nothing re-renders on reopen: relative times stay frozen and plain working-tree
+ * edits (which the .git watcher never sees) stay invisible. `show()` is always
+ * paired with `set_focus()`, so focus-gained is the reliable "reopened" signal.
+ */
+export function onWindowShown(cb: () => void): Promise<UnlistenFn> {
+  return getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+    if (focused) cb();
+  });
 }

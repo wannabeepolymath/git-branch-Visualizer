@@ -252,6 +252,11 @@ function DetailPanel({
     setDiffText(null);
   }, [hash]);
 
+  // Identifies the diff currently on screen. The panel is reused across commits
+  // (expandedHash swaps without unmounting), so the guard needs the hash too.
+  const openKeyRef = useRef<string | null>(null);
+  openKeyRef.current = hash && openDiff ? `${hash}\n${openDiff}` : null;
+
   const toggleDiff = (path: string) => {
     if (!hash) return;
     if (openDiff === path) {
@@ -261,11 +266,14 @@ function DetailPanel({
     }
     setOpenDiff(path);
     setDiffText(null); // DiffView renders its loading state on null
+    const key = `${hash}\n${path}`;
     diffCommitFile(repoId, hash, path)
-      .then(setDiffText)
+      .then((t) => {
+        if (openKeyRef.current === key) setDiffText(t);
+      })
       .catch((e: unknown) => {
         onToast(String(e));
-        setOpenDiff(null);
+        if (openKeyRef.current === key) setOpenDiff(null);
       });
   };
 
@@ -358,10 +366,20 @@ function WorkingChanges({
   } | null>(null);
   const openDiffRef = useRef<string | null>(null);
   openDiffRef.current = openDiff;
+  // Status, the open diff and an armed confirm all belong to ONE (repo, worktree).
+  // Rows render with the CURRENT repoId/worktreePath, so anything left over from a
+  // superseded target cross-targets its actions — a stale row's Discard would
+  // destroy uncommitted work in the repo the user is now looking at.
+  const target = `${repoId}\n${worktreePath ?? ""}`;
+  const targetRef = useRef(target);
+  targetRef.current = target;
 
   const load = useCallback(() => {
+    const t = targetRef.current;
     getStatus(repoId, worktreePath)
-      .then(setStatus)
+      .then((s) => {
+        if (targetRef.current === t) setStatus(s);
+      })
       .catch((e: unknown) => onToast(String(e)));
   }, [repoId, worktreePath, onToast]);
 
@@ -398,6 +416,16 @@ function WorkingChanges({
       })
       .catch(() => {}); // stale text is fine; the next toggle refetches
   }, [status, repoId, worktreePath]);
+  // ...but a TARGET switch invalidates all of it. `run` captured repoId/worktreePath
+  // at arm time, so an armed confirm that survives would fire at the old target —
+  // irreversible loss somewhere the user isn't looking. Declared after the pruning
+  // effect so these nulls win over the updates it queues from the stale status.
+  useEffect(() => {
+    setStatus(null);
+    setOpenDiff(null);
+    setDiffText(null);
+    setPending(null);
+  }, [repoId, worktreePath]);
 
   const staged = status?.staged ?? [];
   const unstaged = status?.unstaged ?? [];
@@ -666,9 +694,12 @@ export function CommitGraph({
     if (refreshKey === 0) return;
     const limit = Math.max(lenRef.current, pageSize);
     let live = true;
+    // Deps are [refreshKey] alone, so `live` never trips on a repo/refs switch —
+    // only the generation catches a page fetched for the previous target.
+    const gen = queryGenRef.current;
     getLog(repoId, refs, 0, limit)
       .then((cs) => {
-        if (!live) return;
+        if (!live || gen !== queryGenRef.current) return;
         setCommits(cs);
         setDone(cs.length < limit);
       })

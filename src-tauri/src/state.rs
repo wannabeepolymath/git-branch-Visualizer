@@ -4,6 +4,7 @@
 use notify::RecommendedWatcher;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
@@ -100,11 +101,23 @@ pub struct AppState {
 
 impl AppState {
     /// Load settings from disk, or fall back to defaults with the given shortcut.
+    /// A file that EXISTS but won't parse is corrupt, not a fresh install: keep it
+    /// (renamed `.corrupt`) so the user's repos/shortcut are recoverable instead of
+    /// being silently overwritten by defaults on the next settings write. A file
+    /// merely missing newer fields still parses (serde defaults) and is untouched.
     pub fn load(config_path: PathBuf, default_shortcut: &str) -> Self {
-        let settings = std::fs::read_to_string(&config_path)
-            .ok()
-            .and_then(|s| serde_json::from_str::<Settings>(&s).ok())
-            .unwrap_or_else(|| Settings::defaults(default_shortcut));
+        let settings = match std::fs::read_to_string(&config_path) {
+            Ok(raw) => serde_json::from_str::<Settings>(&raw).unwrap_or_else(|e| {
+                let corrupt = config_path.with_extension("corrupt");
+                let _ = std::fs::rename(&config_path, &corrupt);
+                eprintln!(
+                    "settings.json did not parse ({e}); kept a copy at {} and started from defaults",
+                    corrupt.display()
+                );
+                Settings::defaults(default_shortcut)
+            }),
+            Err(_) => Settings::defaults(default_shortcut),
+        };
         AppState {
             settings: Mutex::new(settings),
             config_path,
@@ -130,12 +143,27 @@ impl AppState {
     }
 }
 
+/// Serializes the write-then-rename below. Commands run concurrently on the tokio
+/// runtime, and they all share one temp path — without this, two overlapping saves
+/// truncate each other's temp file and one renames a half-written config into place,
+/// which is the very corruption the rename is here to prevent.
+static PERSIST: Mutex<()> = Mutex::new(());
+
 pub fn persist(path: &Path, settings: &Settings) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(path, json).map_err(|e| e.to_string())
+    let _guard = PERSIST.lock().map_err(|e| e.to_string())?;
+    // Write-then-rename: this runs on every checkbox toggle, and a plain write that
+    // dies half-way leaves a truncated file that `load` can only read as corrupt.
+    // The temp file is a sibling so the rename stays on one filesystem (atomic).
+    let tmp = path.with_extension("tmp");
+    let mut f = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
+    f.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
+    f.sync_all().map_err(|e| e.to_string())?;
+    drop(f);
+    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -167,5 +195,70 @@ mod tests {
         let s: Settings = serde_json::from_str(json).expect("old config should still parse");
         assert_eq!(s.open_targets.len(), 3);
         assert_eq!(s.default_open_target.as_deref(), Some("terminal"));
+    }
+
+    /// Fresh empty dir under the system temp dir, named after the test.
+    fn tmp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("bv-state-test-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn truncated_config_is_kept_aside_not_silently_wiped() {
+        let cfg = tmp_dir("truncated").join("settings.json");
+        // Half-written file, exactly what a crash mid-`persist` used to leave.
+        std::fs::write(&cfg, r#"{"repos":[{"id":"/a","name":"a","pa"#).unwrap();
+
+        let st = AppState::load(cfg.clone(), "Alt+Shift+G");
+
+        assert!(st.settings.lock().unwrap().repos.is_empty());
+        assert!(!cfg.exists(), "corrupt file must be moved aside");
+        assert!(
+            cfg.with_extension("corrupt").exists(),
+            "user's config must stay recoverable"
+        );
+    }
+
+    #[test]
+    fn config_missing_a_newer_field_is_left_alone() {
+        // A missing optional field is a successful parse, NOT corruption — the file
+        // must survive untouched with its repos intact.
+        let cfg = tmp_dir("old-field").join("settings.json");
+        std::fs::write(
+            &cfg,
+            r#"{
+                "repos": [{"id": "/a", "name": "a", "path": "/a"}],
+                "activeRepoId": "/a", "shortcut": "Alt+Shift+G",
+                "launchAtLogin": false, "theme": "midnight",
+                "commitsPerPage": 200, "showRemoteBranches": true
+            }"#,
+        )
+        .unwrap();
+
+        let st = AppState::load(cfg.clone(), "Alt+Shift+G");
+
+        assert_eq!(st.settings.lock().unwrap().repos.len(), 1);
+        assert!(cfg.exists());
+        assert!(!cfg.with_extension("corrupt").exists());
+    }
+
+    #[test]
+    fn persist_leaves_no_temp_file_and_round_trips() {
+        let cfg = tmp_dir("persist").join("settings.json");
+        let mut s = Settings::defaults("Alt+Shift+G");
+        s.repos.push(RepoInfo {
+            id: "/a".into(),
+            name: "a".into(),
+            path: "/a".into(),
+        });
+
+        persist(&cfg, &s).unwrap();
+
+        assert!(!cfg.with_extension("tmp").exists(), "temp must be renamed");
+        let loaded = AppState::load(cfg.clone(), "Alt+Shift+G");
+        assert_eq!(loaded.settings.lock().unwrap().repos.len(), 1);
+        assert!(!cfg.with_extension("corrupt").exists());
     }
 }
