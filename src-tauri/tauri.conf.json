@@ -31,9 +31,18 @@
       "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE1OUFBQzc3MzlDOTU4QzcKUldUSFdNazVkNnlhcFRMTXdzemV6RS9SQ1h5VnNtSHZxbFRzQmRpR21zYzUzNEI2MWlBQW8rdnYK",
+      "endpoints": [
+        "https://github.com/wannabeepolymath/git-branch-Visualizer/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["app", "dmg"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

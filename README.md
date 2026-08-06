@@ -56,6 +56,18 @@ bun run tauri build
 
 The `.app` bundle and `.dmg` land in `src-tauri/target/release/bundle/`. Both are built for the host architecture only and are adhoc-signed, so they run on the machine that built them but fail Gatekeeper anywhere else. Prebuilt distribution needs a Developer ID certificate and notarization; until then, Homebrew building locally is the distribution path.
 
+## Releasing (and how updates reach users)
+
+Settings → **Updates** checks `releases/latest/download/latest.json` on this repo, downloads the signed `.app.tar.gz`, swaps the bundle in place, and offers a restart. The updater verifies its own minisign signature, so an unsigned build still updates safely — but the app must be writable where it sits (a Homebrew-installed copy gets overwritten under the brew prefix, which `brew upgrade` will then rebuild over).
+
+Publishing a release is one push:
+
+```sh
+git tag v1.0.3 && git push origin v1.0.3
+```
+
+`.github/workflows/release.yml` builds a universal binary, signs it, and uploads the artifacts plus `latest.json`. It needs one repo secret, `TAURI_SIGNING_PRIVATE_KEY` — the contents of the minisign private key whose public half is `plugins.updater.pubkey` in `tauri.conf.json`. Lose that key and no future build can produce an update the shipped app will accept.
+
 ## Using the app
 
 The app lives in the **menu bar only** — no Dock icon, no regular window. Open it from the menu bar icon or the global shortcut, then work directly inside the popover.

@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type Update } from "@tauri-apps/plugin-updater";
 import {
   getSettings,
   normalizeTheme,
@@ -52,7 +55,15 @@ function displayShortcut(s: string): string {
   return IS_MAC ? s.split("+").map((p) => MAC_MOD_SYMBOLS[p] ?? p).join("") : s;
 }
 
-const SECTION_IDS = ["repos", "general", "worktrees", "appearance", "graph", "commands"] as const;
+const SECTION_IDS = [
+  "repos",
+  "general",
+  "worktrees",
+  "appearance",
+  "graph",
+  "updates",
+  "commands",
+] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 // Read-only reference of the git command each button runs, grouped by area.
@@ -195,6 +206,121 @@ function PlusIcon() {
 /** Shared style for the small "Add …" outline buttons. */
 const ADD_BTN =
   "flex items-center gap-1 rounded-md border border-edge bg-panel2 px-2.5 py-1 text-[11px] text-muted outline-none hover:bg-hover hover:text-fg focus-visible:ring-1 focus-visible:ring-accent";
+
+/** Same shape as ADD_BTN, tinted for the one affirmative action in a row. */
+const PRIMARY_BTN =
+  "flex items-center gap-1 rounded-md border border-accent bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent outline-none hover:opacity-80 focus-visible:ring-1 focus-visible:ring-accent";
+
+type UpdateStatus =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "none" }
+  | { kind: "available"; update: Update }
+  | { kind: "downloading"; pct: number | null }
+  | { kind: "ready" }
+  | { kind: "error"; msg: string };
+
+/**
+ * Check → download → restart, against the GitHub Releases endpoint configured in
+ * tauri.conf.json. Downloading replaces the .app bundle in place; the new binary
+ * only runs after a relaunch, hence the two-step flow.
+ */
+function UpdatesBody() {
+  const [version, setVersion] = useState("");
+  const [status, setStatus] = useState<UpdateStatus>({ kind: "idle" });
+  useEffect(() => {
+    void getVersion().then(setVersion);
+  }, []);
+
+  const busy = status.kind === "checking" || status.kind === "downloading";
+
+  const runCheck = async () => {
+    setStatus({ kind: "checking" });
+    try {
+      const update = await check();
+      setStatus(update ? { kind: "available", update } : { kind: "none" });
+    } catch (e) {
+      setStatus({ kind: "error", msg: String(e) });
+    }
+  };
+
+  const install = async (update: Update) => {
+    setStatus({ kind: "downloading", pct: null });
+    let total = 0;
+    let got = 0;
+    try {
+      await update.downloadAndInstall((e) => {
+        if (e.event === "Started") {
+          total = e.data.contentLength ?? 0;
+        } else if (e.event === "Progress") {
+          got += e.data.chunkLength;
+          setStatus({
+            kind: "downloading",
+            pct: total ? Math.round((got / total) * 100) : null,
+          });
+        }
+      });
+      setStatus({ kind: "ready" });
+    } catch (e) {
+      setStatus({ kind: "error", msg: String(e) });
+    }
+  };
+
+  return (
+    <div className="px-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12px] text-fg">
+          Version <span className="font-mono text-muted">{version}</span>
+        </span>
+        <button className={ADD_BTN} disabled={busy} onClick={() => void runCheck()}>
+          {status.kind === "checking" ? "Checking…" : "Check for updates"}
+        </button>
+      </div>
+
+      {status.kind === "none" && (
+        <p className="mt-2 text-[11px] text-faint">You’re on the latest version.</p>
+      )}
+
+      {status.kind === "available" && (
+        <div className="mt-2 flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[11px] text-fg">Version {status.update.version} is available</div>
+            {status.update.body && (
+              <div className="mt-0.5 max-h-24 overflow-y-auto text-[10px] leading-relaxed whitespace-pre-wrap text-faint">
+                {status.update.body}
+              </div>
+            )}
+          </div>
+          <button
+            className={`shrink-0 ${PRIMARY_BTN}`}
+            onClick={() => void install(status.update)}
+          >
+            Download &amp; install
+          </button>
+        </div>
+      )}
+
+      {status.kind === "downloading" && (
+        <p className="mt-2 text-[11px] text-muted">
+          Downloading…{status.pct !== null && ` ${status.pct}%`}
+        </p>
+      )}
+
+      {status.kind === "ready" && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-fg">Installed — restart to finish.</span>
+          <button className={`shrink-0 ${PRIMARY_BTN}`} onClick={() => void relaunch()}>
+            Restart now
+          </button>
+        </div>
+      )}
+
+      {status.kind === "error" && (
+        <p className="mt-2 text-[11px] break-words text-del">{status.msg}</p>
+      )}
+    </div>
+  );
+}
 
 export function SettingsView({
   settings,
@@ -514,6 +640,14 @@ export function SettingsView({
             />
             Show remote branches by default
           </label>
+        </Section>
+
+        <Section
+          title="Updates"
+          open={openSections.has("updates")}
+          onToggle={() => toggleSection("updates")}
+        >
+          <UpdatesBody />
         </Section>
 
         <Section
