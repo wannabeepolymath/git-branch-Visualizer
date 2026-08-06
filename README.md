@@ -43,16 +43,26 @@ then re-run the install.
 
 ### Linux (beta)
 
-Grab a `.deb`, `.rpm`, or `.AppImage` from the [latest release](https://github.com/wannabeepolymath/git-branch-Visualizer/releases/latest). x86_64 only for the beta.
-
-**deb and rpm are the recommended install.** They register a `.desktop` entry, so the app appears in your applications menu — which is the primary way to open it on Linux, where the tray is optional and the global shortcut may not work at all (see below).
-
 ```sh
-sudo dpkg -i branch-visualizer_*_amd64.deb    # Debian, Ubuntu
-sudo rpm -i branch-visualizer-*.x86_64.rpm    # Fedora, RHEL, openSUSE
+curl -fsSL https://raw.githubusercontent.com/wannabeepolymath/git-branch-Visualizer/main/install.sh | sh
 ```
 
-The AppImage is the distro-agnostic fallback: `chmod +x` it and run it. It installs **no** `.desktop` entry, so it will not show up in your applications menu on its own — use [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) or write a `.desktop` file by hand if you want a launcher icon.
+x86_64 only for the beta. The script picks the format your system actually uses — `.deb` where dpkg exists, `.rpm` where rpm does, AppImage otherwise — and installs it. The deb and rpm paths call `sudo` and will prompt; the AppImage path is entirely userspace (`~/.local/bin`) and needs no password. To install a specific release, including a prerelease that `latest` skips:
+
+```sh
+curl -fsSL .../install.sh | BV_VERSION=v1.1.0-rc1 sh
+```
+
+Prefer to do it by hand? Grab an artifact from the [latest release](https://github.com/wannabeepolymath/git-branch-Visualizer/releases/latest):
+
+```sh
+sudo apt install ./branch-visualizer_*_amd64.deb    # Debian, Ubuntu
+sudo dnf install ./branch-visualizer-*.x86_64.rpm   # Fedora, RHEL
+```
+
+**deb and rpm are the recommended formats.** They register a `.desktop` entry, so the app appears in your applications menu — the primary way to open it on Linux, where the tray is optional and the global shortcut may not work at all (see below).
+
+The AppImage is the distro-agnostic fallback. On its own it installs **no** `.desktop` entry and so never appears in your applications menu; the install script works around this by writing one (and extracting the icon) into `~/.local/share/applications`. If you download the AppImage manually instead, use [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) or write that file yourself.
 
 Runtime libraries you may need to install first (the deb and rpm declare them; the AppImage does not):
 
