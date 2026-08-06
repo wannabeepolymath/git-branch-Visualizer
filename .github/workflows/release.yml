@@ -66,6 +66,11 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Branch Visualizer ${{ github.ref_name }}
+          # Any tag with a hyphen (v1.1.0-rc1, -beta) ships as a prerelease.
+          # GitHub excludes those from "latest", which is what the updater endpoint
+          # resolves — without this a test tag would become latest.json for every
+          # installed copy and push the RC out to everyone.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           # tauri.release.conf.json turns on the signed updater artifact. It stays
           # out of tauri.conf.json so a plain `tauri build` needs no private key —
           # Homebrew compiles from source on the user's machine, where the key
