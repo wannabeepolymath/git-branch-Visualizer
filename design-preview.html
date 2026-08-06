@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Branch Visualizer — Redesign Directions</title>
+<style>
+  :root {
+    --pg-bg: #fbfbfc;
+    --pg-surface: #ffffff;
+    --pg-text: #16171c;
+    --pg-muted: #5f6472;
+    --pg-faint: #9297a4;
+    --pg-border: #e7e8ee;
+    --pg-accent: #5b5bd6;
+    --pg-accent-soft: rgba(91,91,214,.10);
+    --pg-shadow: 0 24px 60px -28px rgba(20,22,40,.28);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --pg-bg: #0b0c10;
+      --pg-surface: #111318;
+      --pg-text: #e7e8ee;
+      --pg-muted: #969ba9;
+      --pg-faint: #636876;
+      --pg-border: #21242c;
+      --pg-accent: #8b8cf6;
+      --pg-accent-soft: rgba(139,140,246,.14);
+      --pg-shadow: 0 30px 70px -30px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="light"] {
+    --pg-bg: #fbfbfc; --pg-surface: #ffffff; --pg-text: #16171c; --pg-muted: #5f6472;
+    --pg-faint: #9297a4; --pg-border: #e7e8ee; --pg-accent: #5b5bd6;
+    --pg-accent-soft: rgba(91,91,214,.10); --pg-shadow: 0 24px 60px -28px rgba(20,22,40,.28);
+  }
+  :root[data-theme="dark"] {
+    --pg-bg: #0b0c10; --pg-surface: #111318; --pg-text: #e7e8ee; --pg-muted: #969ba9;
+    --pg-faint: #636876; --pg-border: #21242c; --pg-accent: #8b8cf6;
+    --pg-accent-soft: rgba(139,140,246,.14); --pg-shadow: 0 30px 70px -30px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--pg-bg);
+    color: var(--pg-text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- theme toggle ---------- */
+  .toggle {
+    position: fixed; top: 16px; right: 16px; z-index: 100;
+    display: flex; gap: 2px; padding: 3px; border-radius: 999px;
+    border: 1px solid var(--pg-border); background: var(--pg-surface);
+    box-shadow: 0 6px 20px -10px rgba(0,0,0,.35);
+  }
+  .toggle button {
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    border: 0; background: transparent; color: var(--pg-muted);
+    padding: 4px 11px; border-radius: 999px; line-height: 1.4;
+  }
+  .toggle button[aria-pressed="true"] { background: var(--pg-accent-soft); color: var(--pg-accent); }
+
+  /* ---------- masthead ---------- */
+  .masthead { padding: 72px 0 40px; border-bottom: 1px solid var(--pg-border); }
+  .eyebrow {
+    font-size: 12px; font-weight: 650; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--pg-accent); margin: 0 0 18px;
+  }
+  h1 {
+    font-size: clamp(30px, 5.2vw, 50px); line-height: 1.04; letter-spacing: -0.025em;
+    font-weight: 720; margin: 0 0 20px; text-wrap: balance; max-width: 16ch;
+  }
+  .lead { font-size: 17px; color: var(--pg-muted); max-width: 66ch; margin: 0 0 8px; }
+  .lead strong { color: var(--pg-text); font-weight: 620; }
+  .howto {
+    margin-top: 20px; font-size: 13.5px; color: var(--pg-faint);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .howto b { color: var(--pg-muted); font-weight: 600; }
+
+  /* ---------- direction blocks ---------- */
+  .dir { padding: 56px 0; border-bottom: 1px solid var(--pg-border); }
+  .dir-head { display: grid; grid-template-columns: 1fr; gap: 22px; margin-bottom: 34px; }
+  @media (min-width: 860px) { .dir-head { grid-template-columns: 1.15fr 1fr; gap: 48px; } }
+  .dir-mark { display: flex; align-items: baseline; gap: 16px; margin-bottom: 14px; }
+  .dir-letter {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px; font-weight: 700; color: var(--pg-accent);
+    border: 1.5px solid var(--pg-accent); border-radius: 999px;
+    width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+    flex: none;
+  }
+  .dir-name { font-size: 27px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+  .dir-name .tag { display: block; font-size: 14px; font-weight: 500; color: var(--pg-faint); letter-spacing: 0; margin-top: 2px; }
+  .moves { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 9px; }
+  .moves li { position: relative; padding-left: 20px; font-size: 14.5px; color: var(--pg-muted); }
+  .moves li::before {
+    content: ""; position: absolute; left: 2px; top: 9px; width: 7px; height: 7px;
+    border-radius: 2px; background: var(--pg-accent); opacity: .8;
+  }
+  .moves li strong { color: var(--pg-text); font-weight: 620; }
+  .meta-side { display: flex; flex-direction: column; gap: 18px; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sw {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px 5px 6px;
+    border: 1px solid var(--pg-border); border-radius: 8px; background: var(--pg-surface);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px;
+    color: var(--pg-muted); font-variant-numeric: tabular-nums;
+  }
+  .sw i { width: 15px; height: 15px; border-radius: 4px; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+  .verdict { display: flex; flex-direction: column; gap: 10px; }
+  .verdict div { font-size: 13.5px; display: flex; gap: 9px; align-items: baseline; }
+  .verdict .k {
+    font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 650;
+    color: var(--pg-faint); flex: none; width: 46px; padding-top: 1px;
+  }
+  .verdict .v { color: var(--pg-muted); }
+  .verdict .v b { color: var(--pg-text); font-weight: 600; }
+
+  /* ---------- stage + window frame ---------- */
+  .stage { overflow-x: auto; padding: 6px 2px 14px; scrollbar-width: thin; }
+  .bv-win {
+    min-width: 780px; width: 100%; border-radius: 13px; overflow: hidden;
+    border: 1px solid var(--w-frame, rgba(0,0,0,.16));
+    box-shadow: var(--pg-shadow);
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12.5px;
+    user-select: none;
+  }
+
+  /* header */
+  .bv-header {
+    height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    border-bottom: 1px solid var(--border); background: var(--panel);
+  }
+  .lights { display: flex; gap: 8px; flex: none; }
+  .lights i { width: 12px; height: 12px; border-radius: 999px; display: block; }
+  .lights .r { background: #ff5f57; } .lights .y { background: #febc2e; } .lights .g { background: #28c840; }
+  .repo {
+    display: flex; align-items: center; gap: 6px; font-weight: 620; font-size: 13px;
+    padding: 3px 8px; border-radius: var(--radius); color: var(--text);
+  }
+  .repo svg { color: var(--faint); }
+  .hspace { flex: 1; }
+  .hbtn {
+    width: 26px; height: 26px; border-radius: var(--radius); display: inline-flex;
+    align-items: center; justify-content: center; color: var(--muted);
+  }
+  .hbtn.active { background: var(--accent-soft); color: var(--accent); }
+
+  .bv-body { display: flex; height: 452px; }
+
+  /* branch pane */
+  .bv-side { width: 212px; flex: none; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--panel); }
+  .bv-filter { padding: 8px; }
+  .bv-filter input {
+    width: 100%; border: 1px solid var(--border); background: var(--panel2);
+    border-radius: var(--radius); padding: 5px 9px; font: inherit; font-size: 12px;
+    color: var(--text); outline: none;
+  }
+  .bv-filter input::placeholder { color: var(--faint); }
+  .bv-list { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+  .bv-allrow, .bv-brow {
+    display: flex; align-items: center; gap: 7px; height: var(--brow-h);
+    padding: 0 10px; font-size: 12px; cursor: default;
+  }
+  .bv-allrow { color: var(--muted); }
+  .bv-sel { background: var(--sel-bg); color: var(--sel-text); }
+  .bv-grp {
+    display: flex; align-items: center; gap: 6px; padding: 6px 10px 4px;
+    font-size: 10px; font-weight: 680; letter-spacing: .09em; text-transform: uppercase; color: var(--faint);
+  }
+  .bv-grp .count { font-weight: 500; color: var(--faint); opacity: .8; }
+  .bv-grp svg { opacity: .7; }
+  .bv-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--good); flex: none; }
+  .bv-bname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .bv-allrow.bv-sel .bv-bname, .bv-brow.bv-sel .bv-bname { color: var(--sel-text); }
+  .bv-ab { font-size: 10.5px; color: var(--faint); flex: none; font-variant-numeric: tabular-nums; }
+  .bv-btime { font-size: 10.5px; color: var(--faint); flex: none; font-variant-numeric: tabular-nums; }
+
+  /* main / graph */
+  .bv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .bv-working {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); flex: none;
+  }
+  .bv-working .chev { color: var(--faint); font-size: 9px; }
+  .bv-working .wdot { width: 8px; height: 8px; border-radius: 999px; background: var(--warn); flex: none; }
+  .bv-working .wl { font-weight: 600; font-size: 12px; }
+  .bv-working .wm { font-size: 11px; color: var(--faint); }
+  .bv-graph { flex: 1; overflow-y: auto; }
+
+  .bv-row.is-open { background: var(--sel-bg); }
+  .bv-rowline {
+    display: flex; align-items: center; gap: 8px; height: var(--row-h);
+    padding-right: 12px; cursor: default;
+  }
+  .bv-rowline:hover { background: var(--hover); }
+  .is-open > .bv-rowline:hover { background: transparent; }
+  .bv-rail { flex: none; display: block; }
+  .bv-subj { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  .bv-head {
+    flex: none; font-family: var(--mono); font-size: 8.5px; font-weight: 700; letter-spacing: .05em;
+    padding: 1px 5px; border-radius: 3px; background: var(--accent-soft); color: var(--accent);
+  }
+  .bv-pill {
+    flex: none; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 9.5px; font-weight: 600; line-height: 15px; padding: 0 6px; border-radius: 4px;
+    background: var(--pill-bg); color: var(--pill-text);
+  }
+  .bv-pill.tag { background: var(--tag-bg); color: var(--tag-text); }
+  .bv-pill.bracket { background: transparent; padding: 0; font-family: var(--mono); font-weight: 600; }
+  .bv-hash { flex: none; font-family: var(--mono); font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .bv-time { flex: none; width: 30px; text-align: right; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+  /* commit detail */
+  .bv-detail {
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    background: var(--panel2); padding: 11px 14px;
+  }
+  .bv-detail-top { display: flex; align-items: center; gap: 10px; }
+  .bv-detail-hash { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .bv-copy {
+    font: inherit; font-size: 10px; padding: 1px 7px; border-radius: 4px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+  }
+  .bv-detail-subj { margin-top: 7px; font-size: 12.5px; font-weight: 620; }
+  .bv-detail-body { margin-top: 4px; font-size: 11.5px; color: var(--muted); max-width: 62ch; }
+  .bv-detail-meta { margin-top: 7px; font-size: 11px; color: var(--faint); }
+  .bv-detail-files { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+  .bv-file { display: flex; align-items: center; gap: 9px; font-size: 11px; color: var(--muted); }
+  .bv-file .s { font-family: var(--mono); font-weight: 700; width: 10px; text-align: center; flex: none; }
+  .bv-file .s.add { color: var(--add); } .bv-file .s.mod { color: var(--mod); } .bv-file .s.del { color: var(--del); }
+
+  /* ---------- recommendation ---------- */
+  .rec { padding: 60px 0 96px; }
+  .rec h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .rec p { color: var(--pg-muted); max-width: 70ch; margin: 0 0 28px; font-size: 15px; }
+  .phases { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 720px) { .phases { grid-template-columns: repeat(2, 1fr); } }
+  .phase { border: 1px solid var(--pg-border); border-radius: 12px; padding: 18px 20px; background: var(--pg-surface); }
+  .phase .n { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; font-weight: 700; color: var(--pg-accent); }
+  .phase h3 { margin: 6px 0 6px; font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
+  .phase p { margin: 0; font-size: 13.5px; color: var(--pg-muted); }
+  .phase code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; background: var(--pg-accent-soft); color: var(--pg-accent); padding: 1px 5px; border-radius: 5px; }
+  .cta {
+    margin-top: 30px; padding: 20px 22px; border-radius: 12px;
+    border: 1px solid var(--pg-accent); background: var(--pg-accent-soft);
+    font-size: 15px; color: var(--pg-text);
+  }
+  .cta b { font-weight: 680; }
+  .cta code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="toggle" role="group" aria-label="Preview theme">
+  <button data-set="light" aria-pressed="false">Light</button>
+  <button data-set="dark" aria-pressed="false">Dark</button>
+  <button data-set="system" aria-pressed="true">System</button>
+</div>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Branch Visualizer · Redesign</p>
+    <h1>Three directions for the same app.</h1>
+    <p class="lead">Each window below is the <strong>real layout</strong> — repo header, branch pane, commit graph with rails, an expanded commit, the uncommitted-changes strip — rendered from <strong>one identical dataset</strong>. Nothing about the structure changes between them. What changes is the entire visual language: palette, density, type, chrome, and how the graph rails read.</p>
+    <p class="lead">That's the whole thesis of the rebuild: once the look lives in a token layer, swapping between these is a values change, not a rewrite.</p>
+    <div class="howto"><b>Pick one</b> — or mix (e.g. Graphite's density with Paper's light ground). Scroll each window horizontally if it's wider than your screen. The toggle top-right only restyles this page's chrome; each window keeps its own committed look.</div>
+  </header>
+
+  <section class="dir">
+    <div class="dir-head">
+      <div>
+        <div class="dir-mark">
+          <span class="dir-letter">A</span>
+          <h2 class="dir-name">Graphite<span class="tag">Calm professional devtool — the Fork / Linear register</span></h2>
+        </div>
+        <ul class="moves">
+          <li><strong>Cool blue-graphite neutrals, one indigo accent</strong> — nothing else competes for attention.</li>
+          <li><strong>Hairline borders, zero shadows</strong> — depth comes from tone, not elevation.</li>
+          <li><strong>28px rows, tabular hashes</strong> — dense, but never cramped.</li>
+          <li>Muted lane rails; the <strong>current branch dot</strong> is the only saturated thing on screen.</li>
+        </ul>
+      </div>
+      <div class="meta-side">
+        <div class="swatches" data-sw="graphite"></div>
+        <div class="verdict">
+          <div><span class="k">Best for</span><span class="v">Long sessions on big repos. <b>Quietly trustworthy.</b></span></div>
+          <div><span class="k">Risk</span><span class="v">Understated by design — earns respect in use, won't shout in a screenshot.</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="stage"><div class="bv-win" data-win="graphite"></div></div>
+  </section>
+
+  <section class="dir">
+    <div class="dir-head">
+      <div>
+        <div class="dir-mark">
+          <span class="dir-letter">B</span>
+          <h2 class="dir-name">Paper<span class="tag">Light, roomy, approachable — Raycast / Things energy</span></h2>
+        </div>
+        <ul class="moves">
+          <li><strong>Warm-cool light ground with a single teal accent</strong> — clean, not clinical (no cream, no serif).</li>
+          <li><strong>Soft 10px cards and a whisper of shadow</strong> separate the panels.</li>
+          <li><strong>Roomier 34px rows and larger type</strong> — scans like a document.</li>
+          <li>Saturated rails read <strong>crisply on white</strong>; the detail card feels like a real inspector.</li>
+        </ul>
+      </div>
+      <div class="meta-side">
+        <div class="swatches" data-sw="paper"></div>
+        <div class="verdict">
+          <div><span class="k">Best for</span><span class="v">Daytime work, demos, screenshots. <b>Most inviting.</b></span></div>
+          <div><span class="k">Risk</span><span class="v">Less info per screen — power users may want it tightened.</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="stage"><div class="bv-win" data-win="paper"></div></div>
+  </section>
+
+  <section class="dir">
+    <div class="dir-head">
+      <div>
+        <div class="dir-mark">
+          <span class="dir-letter">C</span>
+          <h2 class="dir-name">Terminal<span class="tag">High-contrast TUI — lazygit reimagined</span></h2>
+        </div>
+        <ul class="moves">
+          <li><strong>True-black ground, monospace everywhere, phosphor-green accent.</strong></li>
+          <li><strong>Neon lane rails with a faint glow</strong>; nodes are squares, not dots.</li>
+          <li>Refs as bracketed tags — <strong>[feat/token-layer]</strong>, <strong>&lt;v0.1.0&gt;</strong>.</li>
+          <li><strong>24px rows</strong> — maximum density, keyboard-driven energy.</li>
+        </ul>
+      </div>
+      <div class="meta-side">
+        <div class="swatches" data-sw="terminal"></div>
+        <div class="verdict">
+          <div><span class="k">Best for</span><span class="v">Keyboard-first devs. <b>A strong, ownable identity.</b></span></div>
+          <div><span class="k">Risk</span><span class="v">Commits hard to one mood — polarizing, and dark-only by design.</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="stage"><div class="bv-win" data-win="terminal"></div></div>
+  </section>
+
+  <section class="rec">
+    <h2>However we go — build it token-first</h2>
+    <p>All three windows above share the exact same markup and data; only a set of variables differs. That's not a mockup trick — it's the delivery plan. The current code hardcodes every color and size inline across six files, twice (light + dark). We fix that once, then the chosen look is a small diff.</p>
+    <div class="phases">
+      <div class="phase"><div class="n">00</div><h3>Lock the direction</h3><p>You pick A / B / C (or a blend). I turn it into concrete tokens: palette, radius, base size, row height, rail style.</p></div>
+      <div class="phase"><div class="n">01</div><h3>Token layer</h3><p>Define the palette as CSS variables mapped through Tailwind v4 <code>@theme inline</code>, with a <code>.dark</code> override. One place owns the whole look — and every inline <code>dark:</code> variant disappears.</p></div>
+      <div class="phase"><div class="n">02</div><h3>Mechanical sweep</h3><p>Swap raw <code>neutral-*</code> / <code>blue-*</code> utilities for the semantic tokens, file by file. No visual change yet — pure re-plumbing (good to hand off to a bulk model).</p></div>
+      <div class="phase"><div class="n">03</div><h3>Apply + polish</h3><p>Set the token values to the chosen direction, tune the graph rails (<code>ROW_H</code> / <code>LANE_W</code> are already constants), then per-component spacing where the look needs it.</p></div>
+    </div>
+    <div class="cta"><b>Approve a direction</b> — A, B, or C, or a blend (e.g. <code>Graphite density + Paper's light ground</code>) — and say the word to build it token-first. Nothing in the repo changes until then; this file is a throwaway you can delete.</div>
+  </section>
+</div>
+
+<script>
+  const ICON = {
+    chev: '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+    grpOpen: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(90deg)"><path d="m9 18 6-6-6-6"/></svg>',
+    panel: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>',
+    fetch: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>',
+    pull: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v13"/><path d="m6 12 6 6 6-6"/></svg>',
+    gear: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  };
+
+  // one shared topology + data set — rendered by every theme
+  const COMMITS = [
+    { lane:0, node:'merge',  passes:[],  ins:[],  outs:[0,1], subject:"Merge 'feat/token-layer' into main", refs:[['b','main'],['b','origin/main']], hash:'a1c9f42', time:'2h', head:true },
+    { lane:1, node:'commit', passes:[0], ins:[1], outs:[1],   subject:"Extract semantic color tokens into @theme", refs:[['b','feat/token-layer']], hash:'7e3b0d1', time:'5m', open:true },
+    { lane:1, node:'commit', passes:[0], ins:[1], outs:[1],   subject:"Map tokens to Tailwind @theme inline", refs:[], hash:'2f8a6c4', time:'22m' },
+    { lane:1, node:'commit', passes:[0], ins:[1], outs:[1],   subject:"Sweep BranchPane to token classes", refs:[], hash:'9d41e77', time:'40m' },
+    { lane:1, node:'commit', passes:[0], ins:[1], outs:[0],   subject:"Start redesign: snapshot current UI in SPEC", refs:[], hash:'c05be90', time:'1h' },
+    { lane:0, node:'commit', passes:[],  ins:[0], outs:[0],   subject:"Add README with run, build, and usage", refs:[['b','origin/develop'],['t','v0.1.0']], hash:'fb44f5d', time:'6h' },
+    { lane:0, node:'commit', passes:[],  ins:[0], outs:[0],   subject:"Make branch panel resizable via drag handle", refs:[], hash:'d554db2', time:'8h' },
+    { lane:0, node:'commit', passes:[],  ins:[0], outs:[0],   subject:"Add hideable branch panel (persisted)", refs:[], hash:'cf27864', time:'1d' },
+    { lane:0, node:'commit', passes:[],  ins:[0], outs:[],    subject:"Add settings UI and pull button", refs:[], hash:'0c709f9', time:'2d' },
+  ];
+
+  const BRANCHES = {
+    current: { name:'main', ahead:2, behind:0, time:'2h' },
+    local: [
+      { name:'feat/token-layer', ahead:6, behind:1, time:'5m', sel:true },
+      { name:'fix/rail-clipping', ahead:0, behind:0, time:'3h' },
+      { name:'release/0.2', ahead:0, behind:4, time:'1d' },
+    ],
+    remotes: ['origin/main', 'origin/develop', 'origin/feat/token-layer'],
+  };
+
+  const FILES = [
+    ['add','A','src/tokens.css'],
+    ['mod','M','src/index.css'],
+    ['mod','M','src/components/BranchPane.tsx'],
+    ['mod','M','src/App.tsx'],
+  ];
+
+  const THEMES = {
+    graphite: {
+      frame:'#000', font:'-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif',
+      mono:'ui-monospace,"SF Mono",Menlo,monospace',
+      vars:{ bg:'#0e1016', panel:'#12141b', panel2:'#171a22', border:'#23262f', text:'#d3d6df',
+        muted:'#868b98', faint:'#5b606d', accent:'#8b8cf6', 'accent-soft':'rgba(139,140,246,.14)',
+        hover:'rgba(255,255,255,.035)', good:'#4ade80', warn:'#fbbf24', add:'#4ade80', mod:'#fbbf24', del:'#f87171',
+        'sel-bg':'rgba(139,140,246,.13)', 'sel-text':'#bcbdff',
+        'pill-bg':'rgba(139,140,246,.16)', 'pill-text':'#a9aaf8', 'tag-bg':'rgba(251,191,36,.13)', 'tag-text':'#f4c14e',
+        radius:'6px', 'row-h':'28px', 'brow-h':'26px' },
+      lanes:['#8b8cf6','#48b4c4'], railW:1.6, laneW:14, node:'circle', glow:false, brackets:false,
+    },
+    paper: {
+      frame:'rgba(0,0,0,.10)', font:'-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif',
+      mono:'ui-monospace,"SF Mono",Menlo,monospace',
+      vars:{ bg:'#f4f6f5', panel:'#ffffff', panel2:'#f7f9f8', border:'#e4e8e7', text:'#1b2422',
+        muted:'#5f6b68', faint:'#98a4a0', accent:'#0f8a72', 'accent-soft':'rgba(15,138,114,.10)',
+        hover:'rgba(15,138,114,.05)', good:'#12a37a', warn:'#c2410c', add:'#12a37a', mod:'#b45309', del:'#dc2626',
+        'sel-bg':'rgba(15,138,114,.10)', 'sel-text':'#0b6b58',
+        'pill-bg':'rgba(15,138,114,.12)', 'pill-text':'#0b6b58', 'tag-bg':'rgba(180,83,9,.12)', 'tag-text':'#a2560a',
+        radius:'10px', 'row-h':'34px', 'brow-h':'30px' },
+      lanes:['#0f8a72','#4f46e5'], railW:1.9, laneW:15, node:'circle', glow:false, brackets:false,
+    },
+    terminal: {
+      frame:'#000', font:'ui-monospace,"JetBrains Mono","SF Mono","Cascadia Code",Menlo,Consolas,monospace',
+      mono:'ui-monospace,"JetBrains Mono","SF Mono",Menlo,monospace',
+      vars:{ bg:'#060a08', panel:'#0a0f0c', panel2:'#0d130f', border:'#17271c', text:'#cbe8d6',
+        muted:'#7d9c88', faint:'#4c6355', accent:'#4ade80', 'accent-soft':'rgba(74,222,128,.13)',
+        hover:'rgba(74,222,128,.06)', good:'#4ade80', warn:'#fbbf24', add:'#4ade80', mod:'#fbbf24', del:'#ff6b6b',
+        'sel-bg':'rgba(74,222,128,.11)', 'sel-text':'#8ffcb4',
+        'pill-bg':'transparent', 'pill-text':'#22d3ee', 'tag-bg':'transparent', 'tag-text':'#fbbf24',
+        radius:'2px', 'row-h':'24px', 'brow-h':'23px' },
+      lanes:['#4ade80','#22d3ee'], railW:1.5, laneW:13, node:'square', glow:true, brackets:true,
+    },
+  };
+
+  function rail(row, t) {
+    const LW = t.laneW, pad = 8, H = parseInt(t.vars['row-h']), cy = H/2;
+    const x = l => pad + l*LW;
+    const cx = x(row.lane);
+    const w = 2*LW + pad*2;
+    const glow = c => t.glow ? `filter:drop-shadow(0 0 2.5px ${c})` : '';
+    const line = (d,c) => `<path d="${d}" stroke="${c}" fill="none" stroke-width="${t.railW}" style="${glow(c)}"/>`;
+    let p = '';
+    row.passes.forEach(j => p += line(`M ${x(j)} 0 V ${H}`, t.lanes[j]));
+    row.ins.forEach(j => p += line(j===row.lane ? `M ${cx} 0 V ${cy}` : `M ${x(j)} 0 Q ${x(j)} ${cy} ${cx} ${cy}`, t.lanes[j]));
+    row.outs.forEach(j => p += line(j===row.lane ? `M ${cx} ${cy} V ${H}` : `M ${cx} ${cy} Q ${x(j)} ${cy} ${x(j)} ${H}`, t.lanes[j]));
+    const c = t.lanes[row.lane];
+    const merge = row.outs.length > 1;
+    let node;
+    if (t.node === 'square') {
+      node = `<rect x="${cx-3.2}" y="${cy-3.2}" width="6.4" height="6.4" fill="${merge?t.vars.bg:c}" stroke="${c}" stroke-width="${t.railW}" style="${glow(c)}"/>`;
+    } else if (merge) {
+      node = `<circle cx="${cx}" cy="${cy}" r="3.4" fill="${t.vars.bg}" stroke="${c}" stroke-width="1.6"/>`;
+    } else {
+      node = `<circle cx="${cx}" cy="${cy}" r="3.4" fill="${c}" style="${glow(c)}"/>`;
+    }
+    return `<svg class="bv-rail" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}">${p}${node}</svg>`;
+  }
+
+  function pill(ref, t) {
+    const [kind, name] = ref;
+    if (t.brackets) {
+      const txt = kind === 't' ? `&lt;${name}&gt;` : `[${name}]`;
+      return `<span class="bv-pill bracket${kind==='t'?' tag':''}">${txt}</span>`;
+    }
+    return `<span class="bv-pill${kind==='t'?' tag':''}">${name}</span>`;
+  }
+
+  function commitRow(c, t) {
+    const rails = rail(c, t);
+    const pills = c.refs.map(r => pill(r, t)).join('');
+    const head = c.head ? `<span class="bv-head">HEAD</span>` : '';
+    const line = `<div class="bv-rowline">${rails}<span class="bv-subj">${c.subject}</span>${head}${pills}<span class="bv-hash">${c.hash}</span><span class="bv-time">${c.time}</span></div>`;
+    if (!c.open) return `<div class="bv-row">${line}</div>`;
+    const files = FILES.map(([cl,l,p]) => `<div class="bv-file"><span class="s ${cl}">${l}</span>${p}</div>`).join('');
+    const detail = `<div class="bv-detail">
+      <div class="bv-detail-top"><span class="bv-detail-hash">7e3b0d1f2ab4</span><button class="bv-copy">Copy hash</button></div>
+      <div class="bv-detail-subj">Extract semantic color tokens into @theme</div>
+      <div class="bv-detail-body">Introduce a --color-* variable layer mapped through @theme inline, so the whole palette flips with .dark from a single place.</div>
+      <div class="bv-detail-meta">Daksh &lt;pritam@emergent.sh&gt; · Jul 9, 2026, 2:14 PM</div>
+      <div class="bv-detail-files">${files}</div>
+    </div>`;
+    return `<div class="bv-row is-open">${line}${detail}</div>`;
+  }
+
+  function branchRow(b, t) {
+    const ab = (b.ahead || b.behind)
+      ? `<span class="bv-ab">${b.ahead?'↑'+b.ahead:''}${b.ahead&&b.behind?' ':''}${b.behind?'↓'+b.behind:''}</span>` : '';
+    return `<div class="bv-brow${b.sel?' bv-sel':''}"><span class="bv-bname">${b.name}</span>${ab}<span class="bv-btime">${b.time}</span></div>`;
+  }
+
+  function buildWindow(el, key) {
+    const t = THEMES[key];
+    let style = `--font:${t.font};--mono:${t.mono};--w-frame:${t.frame};`;
+    for (const k in t.vars) style += `--${k}:${t.vars[k]};`;
+    el.setAttribute('style', style);
+
+    const cur = BRANCHES.current;
+    const curRow = `<div class="bv-brow"><span class="bv-dot"></span><span class="bv-bname">${cur.name}</span><span class="bv-ab">↑${cur.ahead}</span><span class="bv-btime">${cur.time}</span></div>`;
+    const localRows = BRANCHES.local.map(b => branchRow(b, t)).join('');
+    const remoteRows = BRANCHES.remotes.map(n => branchRow({name:n, time:'2h'}, t)).join('');
+    const commitRows = COMMITS.map(c => commitRow(c, t)).join('');
+
+    el.innerHTML = `
+      <div class="bv-header">
+        <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        <div class="repo">branch-visualizer ${ICON.chev}</div>
+        <div class="hspace"></div>
+        <div class="hbtn active">${ICON.panel}</div>
+        <div class="hbtn">${ICON.fetch}</div>
+        <div class="hbtn">${ICON.pull}</div>
+        <div class="hbtn">${ICON.gear}</div>
+      </div>
+      <div class="bv-body">
+        <div class="bv-side">
+          <div class="bv-filter"><input placeholder="Filter branches…" readonly></div>
+          <div class="bv-list">
+            <div class="bv-allrow">All branches</div>
+            <div class="bv-grp">Current</div>
+            ${curRow}
+            <div class="bv-grp">${ICON.grpOpen} Local <span class="count">3</span></div>
+            ${localRows}
+            <div class="bv-grp">${ICON.grpOpen} Remotes <span class="count">3</span></div>
+            ${remoteRows}
+          </div>
+        </div>
+        <div class="bv-main">
+          <div class="bv-working">
+            <span class="chev">▸</span><span class="wdot"></span>
+            <span class="wl">Uncommitted changes</span>
+            <span class="wm">2 staged · 3 unstaged</span>
+          </div>
+          <div class="bv-graph">${commitRows}</div>
+        </div>
+      </div>`;
+  }
+
+  function buildSwatches(el, key) {
+    const t = THEMES[key];
+    const picks = [
+      ['bg', t.vars.bg], ['panel', t.vars.panel], ['border', t.vars.border],
+      ['text', t.vars.text], ['accent', t.vars.accent], ['lane', t.lanes[1]],
+    ];
+    el.innerHTML = picks.map(([lbl,hex]) =>
+      `<span class="sw"><i style="background:${hex}"></i>${hex}</span>`).join('');
+  }
+
+  document.querySelectorAll('[data-win]').forEach(el => buildWindow(el, el.dataset.win));
+  document.querySelectorAll('[data-sw]').forEach(el => buildSwatches(el, el.dataset.sw));
+
+  // page chrome theme toggle
+  const toggle = document.querySelector('.toggle');
+  toggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const set = btn.dataset.set;
+    if (set === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', set);
+    toggle.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+  });
+</script>
+</body>
+</html>

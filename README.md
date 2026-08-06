@@ -91,14 +91,19 @@ On Linux the same command writes `.deb`, `.rpm`, and `.AppImage` to that directo
 
 Settings → **Updates** checks `releases/latest/download/latest.json` on this repo, downloads the signed artifact for your platform (the `.app.tar.gz` on macOS), installs it, and offers a restart. The updater verifies its own minisign signature, so an unsigned build still updates safely — but the app must be writable where it sits (a Homebrew-installed copy gets overwritten under the brew prefix, which `brew upgrade` will then rebuild over).
 
-It is one button everywhere, but four install mechanisms sit behind it — the shipped binary knows which format it was bundled as:
+| Format | How it updates |
+| --- | --- |
+| macOS `.app` | bundle swapped in place |
+| AppImage | file swapped in place |
+| deb / rpm | **not self-updating** — use your package manager, or download the latest release |
 
-| Format | How it updates | What you see |
-| --- | --- | --- |
-| macOS `.app` | bundle swapped in place | nothing |
-| AppImage | file swapped in place | nothing |
-| deb | `pkexec dpkg -i` | a polkit password prompt |
-| rpm | `pkexec rpm -U` | a polkit password prompt |
+deb and rpm cannot self-update, and Settings → Updates hides the button on those
+installs rather than offering one that always fails. The reason is structural, not a
+missing feature: the bundler only emits updater artifacts for updater-enabled targets,
+which on Linux means AppImage only, so `latest.json`'s single `linux-x86_64` entry
+necessarily points at the AppImage. A deb-installed binary would be handed those bytes
+and reject them. Serving all three would need a `{{bundle_type}}`-templated endpoint
+with a JSON file per format — more release machinery than a beta earns.
 
 Publishing a release is one push:
 

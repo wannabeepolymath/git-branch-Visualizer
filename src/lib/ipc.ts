@@ -105,6 +105,9 @@ export interface Settings {
 export interface PlatformInfo {
   platform: "macos" | "linux";
   shortcutSupported: boolean; // false under Wayland: global-hotkey is X11-only
+  /** False for deb/rpm: Linux updater artifacts are AppImage-only, so those
+   *  installs would be served bytes their installer rejects. */
+  canSelfUpdate: boolean;
 }
 
 export const getSettings = (): Promise<Settings> => invoke("get_settings");
@@ -237,4 +240,17 @@ export function onWindowShown(cb: () => void): Promise<UnlistenFn> {
   return getCurrentWindow().onFocusChanged(({ payload: focused }) => {
     if (focused) cb();
   });
+}
+
+/** Which Linux tray menu item was clicked. "quit" never arrives — Rust handles it. */
+export type TrayMenuItem = "show" | "settings" | "updates";
+
+/**
+ * Linux-only. The tray icon there emits no click events (tray-icon 0.24), so the
+ * tray is a menu and its Settings / Check-for-updates items live in the UI. Rust
+ * shows the window and forwards the item id; this is what acts on it. Never fires
+ * on macOS, where clicking the icon toggles the popover directly.
+ */
+export function onTrayMenu(cb: (item: TrayMenuItem) => void): Promise<UnlistenFn> {
+  return listen<TrayMenuItem>("tray-menu", (e) => cb(e.payload));
 }

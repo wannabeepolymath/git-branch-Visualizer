@@ -149,8 +149,26 @@ as (`tauri-utils/src/platform.rs:353`).
 | deb | `pkexec dpkg -i` | polkit password prompt |
 | rpm | `pkexec rpm -U` | polkit password prompt |
 
-So Settings → Updates keeps one button on every platform. Copy gains one line about the
-password prompt.
+**But the plugin supporting deb/rpm is not the same as us being able to serve them,
+and with this endpoint we cannot.** Two facts kill it:
+
+- The bundler only emits updater artifacts for updater-enabled targets — on Linux that
+  is **appimage only**. deb and rpm produce no `.sig`, so the single `linux-x86_64`
+  entry in `latest.json` necessarily points at the AppImage tarball.
+- The plugin dispatches on the *stamped* bundle type, and `{{bundle_type}}` templates
+  only the **endpoint URL**, never the artifact URL inside `latest.json`
+  (`updater.rs:425-440`). A static `releases/latest/download/latest.json` therefore
+  cannot vary by format.
+
+So a deb-installed binary would be handed AppImage bytes and call `install_deb` on
+them. It fails cleanly — `install_deb` checks `infer::archive::is_deb` first and
+returns `InvalidUpdaterFormat` — but it fails.
+
+**Decision for beta: AppImage is the only self-updating Linux format.** `get_platform_info`
+gains `canSelfUpdate`, derived from `bundle_type()`, and Settings → Updates tells deb/rpm
+users to update through their package manager instead of offering a button that cannot
+work. A `{{bundle_type}}`-templated endpoint with three published JSON files would fix it
+properly; that is more release machinery than a beta with no known Linux users earns.
 
 **Launcher entries differ, and the README must say so.** deb and rpm install a
 `.desktop` file, so the app appears in the applications menu on install. AppImage does

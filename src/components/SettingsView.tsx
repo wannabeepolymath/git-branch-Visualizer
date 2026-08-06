@@ -233,7 +233,7 @@ type UpdateStatus =
  * tauri.conf.json. Downloading replaces the .app bundle in place; the new binary
  * only runs after a relaunch, hence the two-step flow.
  */
-function UpdatesBody() {
+function UpdatesBody({ canSelfUpdate }: { canSelfUpdate: boolean }) {
   const [version, setVersion] = useState("");
   const [status, setStatus] = useState<UpdateStatus>({ kind: "idle" });
   useEffect(() => {
@@ -280,10 +280,25 @@ function UpdatesBody() {
         <span className="text-[12px] text-fg">
           Version <span className="font-mono text-muted">{version}</span>
         </span>
-        <button className={ADD_BTN} disabled={busy} onClick={() => void runCheck()}>
-          {status.kind === "checking" ? "Checking…" : "Check for updates"}
-        </button>
+        {canSelfUpdate && (
+          <button className={ADD_BTN} disabled={busy} onClick={() => void runCheck()}>
+            {status.kind === "checking" ? "Checking…" : "Check for updates"}
+          </button>
+        )}
       </div>
+
+      {/*
+        deb/rpm installs can't self-update: the bundler only emits updater artifacts
+        for AppImage on Linux, so latest.json's single linux entry would hand a
+        deb-installed binary AppImage bytes and fail in install_deb. Saying so beats
+        a button that always errors.
+      */}
+      {!canSelfUpdate && (
+        <p className="mt-2 text-[11px] text-faint">
+          Installed from a system package — update through your package manager, or
+          download the latest release.
+        </p>
+      )}
 
       {status.kind === "none" && (
         <p className="mt-2 text-[11px] text-faint">You’re on the latest version.</p>
@@ -688,7 +703,7 @@ export function SettingsView({
           open={openSections.has("updates")}
           onToggle={() => toggleSection("updates")}
         >
-          <UpdatesBody />
+          <UpdatesBody canSelfUpdate={platform.canSelfUpdate} />
         </Section>
 
         <Section

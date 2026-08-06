@@ -7,6 +7,7 @@ import {
   getSettings,
   normalizeTheme,
   onRepoChanged,
+  onTrayMenu,
   onWindowShown,
   pickRepoFolder,
   recenterWindow,
@@ -136,7 +137,7 @@ export default function App() {
         // would hang the whole app on its loading state. Nothing here is load-bearing
         // — square corners and one Settings row — so degrade to the macOS shape and
         // let the toast report the failure.
-        setPlatform({ platform: "macos", shortcutSupported: true });
+        setPlatform({ platform: "macos", shortcutSupported: true, canSelfUpdate: true });
       });
   }, [show]);
 
@@ -228,6 +229,24 @@ export default function App() {
       unlisten?.();
     };
   }, [refresh]);
+
+  // Linux tray menu. Rust has already shown the window by the time this fires; all
+  // that's left is the view switch. "show" needs nothing further, and "quit" never
+  // arrives here — Rust exits on it directly.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let dead = false;
+    void onTrayMenu((item) => {
+      if (item === "settings" || item === "updates") setView("settings");
+    }).then((f) => {
+      if (dead) f();
+      else unlisten = f;
+    });
+    return () => {
+      dead = true;
+      unlisten?.();
+    };
+  }, []);
 
   const addRepository = useCallback(async () => {
     try {

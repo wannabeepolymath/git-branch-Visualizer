@@ -81,6 +81,7 @@ pub fn recenter_window(app: AppHandle) -> Result<(), String> {
 pub struct PlatformInfo {
     platform: &'static str,
     shortcut_supported: bool,
+    can_self_update: bool,
 }
 
 #[tauri::command]
@@ -89,6 +90,7 @@ pub fn get_platform_info() -> PlatformInfo {
         // "macos" | "linux" | "windows", straight from the compiler.
         platform: std::env::consts::OS,
         shortcut_supported: crate::platform::shortcut_supported(),
+        can_self_update: crate::platform::can_self_update(),
     }
 }
 

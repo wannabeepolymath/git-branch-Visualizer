@@ -95,10 +95,11 @@ pub fn run() {
                     // blur came from a native dialog we opened (the folder picker
                     // steals focus). In "window" mode clicking away leaves the
                     // window alone, like any ordinary desktop app.
-                    let hide = window.app_handle().try_state::<AppState>().is_some_and(|s| {
-                        !s.dialog_open.load(std::sync::atomic::Ordering::SeqCst)
-                            && s.settings.lock().is_ok_and(|g| g.window_mode == "popover")
-                    });
+                    let hide = platform::blur_dismiss_is_recoverable()
+                        && window.app_handle().try_state::<AppState>().is_some_and(|s| {
+                            !s.dialog_open.load(std::sync::atomic::Ordering::SeqCst)
+                                && s.settings.lock().is_ok_and(|g| g.window_mode == "popover")
+                        });
                     if hide {
                         let _ = window.hide();
                     }

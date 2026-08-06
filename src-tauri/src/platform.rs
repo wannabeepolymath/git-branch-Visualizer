@@ -129,6 +129,33 @@ pub fn shortcut_supported() -> bool {
     }
 }
 
+/// Whether hiding the popover on blur can be undone. macOS always has the tray
+/// icon to bring it back. On Linux it may be a one-way door: a Wayland session has
+/// no global shortcut (X11-only) and may have no tray at all (GNOME dropped it in
+/// 3.26), and the app has no single-instance handling, so relaunching from the
+/// desktop entry spawns a second process instead of re-showing the first. Hiding
+/// there would strand the window with no way back — including no way back to the
+/// setting that turned popover mode on.
+pub fn blur_dismiss_is_recoverable() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        true
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        shortcut_supported()
+    }
+}
+
+/// Whether this build can install its own updates. The bundler only emits updater
+/// artifacts for updater-enabled targets — on Linux that is AppImage only — so a
+/// deb/rpm install would be served the AppImage entry from `latest.json` and fail
+/// in `install_deb`. Offering a button that cannot work is worse than saying so.
+pub fn can_self_update() -> bool {
+    use tauri::utils::{config::BundleType, platform::bundle_type};
+    !matches!(bundle_type(), Some(BundleType::Deb) | Some(BundleType::Rpm))
+}
+
 #[cfg(target_os = "linux")]
 fn is_wayland() -> bool {
     is_wayland_from(std::env::var("XDG_SESSION_TYPE").ok().as_deref())
