@@ -104,18 +104,23 @@ a session.
 
 ## IPC (TypeScript)
 
-Two additions to the settings payload, both read-only from the frontend's view:
-
-```ts
-platform: "macos" | "linux";
-shortcutSupported: boolean;
-```
-
-and one persisted field:
+One persisted field on `Settings`:
 
 ```ts
 windowMode: "popover" | "window";
 ```
+
+The two derived values get their **own command**, not a place on `Settings`. `Settings`
+is both the persisted struct and the `update_settings` round-trip payload, so a
+read-only field parked on it would be echoed back by the client and written into
+`settings.json` as junk:
+
+```ts
+// get_platform_info
+{ platform: "macos" | "linux"; shortcutSupported: boolean }
+```
+
+Neither value changes while the app runs, so the frontend fetches it once at startup.
 
 ## Transparency
 
