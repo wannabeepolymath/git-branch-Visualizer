@@ -72,6 +72,9 @@ export function normalizeTheme(t: string): ThemeName {
   return THEME_NAMES.includes(t as ThemeName) ? (t as ThemeName) : "midnight";
 }
 
+/** How the window presents itself. Only offered on Linux (see SettingsView). */
+export type WindowMode = "popover" | "window";
+
 /** A configurable "open worktree with…" action. `command` holds a {path} token. */
 export interface OpenTarget {
   id: string;
@@ -90,9 +93,23 @@ export interface Settings {
   confirmActions: boolean;
   openTargets: OpenTarget[];
   defaultOpenTarget: string | null; // OpenTarget id used by the one-click ↗
+  windowMode: WindowMode; // defaults: popover on macOS, window on Linux
+}
+
+/**
+ * Derived from the host, never persisted — it lives outside `Settings` because
+ * that struct is the `update_settings` round-trip payload and would echo any
+ * read-only field back into settings.json. Neither value changes while the app
+ * runs, so fetch it once at startup.
+ */
+export interface PlatformInfo {
+  platform: "macos" | "linux";
+  shortcutSupported: boolean; // false under Wayland: global-hotkey is X11-only
 }
 
 export const getSettings = (): Promise<Settings> => invoke("get_settings");
+
+export const getPlatformInfo = (): Promise<PlatformInfo> => invoke("get_platform_info");
 
 /** Re-anchor the popover window under the tray icon. */
 export const recenterWindow = (): Promise<void> => invoke("recenter_window");

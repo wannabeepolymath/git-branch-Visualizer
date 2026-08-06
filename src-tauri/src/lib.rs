@@ -9,17 +9,22 @@ mod state;
 mod watcher;
 
 use state::AppState;
-use tauri::{
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WebviewWindow, WindowEvent,
-};
+use tauri::{Manager, Runtime, WebviewWindow, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_positioner::{Position, WindowExt};
 
 const MAIN_WINDOW: &str = "main";
 
+/// The window mode is one window with four flags, not two windows. The fourth,
+/// hide-on-blur, isn't a window API — the blur handler reads the setting itself.
+fn apply_window_mode<R: Runtime>(window: &WebviewWindow<R>, mode: &str) {
+    let popover = mode == "popover";
+    let _ = window.set_decorations(!popover);
+    let _ = window.set_always_on_top(popover);
+    let _ = window.set_skip_taskbar(popover);
+}
+
 /// Show the popover anchored under the tray icon, or hide it if already shown.
-fn toggle_popover(window: &WebviewWindow) {
+fn toggle_popover<R: Runtime>(window: &WebviewWindow<R>) {
     if window.is_visible().unwrap_or(false) {
         let _ = window.hide();
     } else {
@@ -32,7 +37,7 @@ fn toggle_popover(window: &WebviewWindow) {
             .try_state::<AppState>()
             .is_none_or(|s| !s.positioned.swap(true, std::sync::atomic::Ordering::SeqCst));
         if first_show {
-            let _ = window.move_window(Position::TrayCenter);
+            platform::anchor_window(window);
         }
         let _ = window.show();
         let _ = window.set_focus();
@@ -78,21 +83,32 @@ pub fn run() {
             commands::fetch_repo,
             commands::pull_repo,
             commands::push_branch,
+            commands::get_platform_info,
         ])
         .on_window_event(|window, event| {
-            // Dismiss the popover when it loses focus (blur) — unless the blur
-            // was caused by a native dialog we opened (e.g. the folder picker).
-            if let WindowEvent::Focused(false) = event {
-                if window.label() == MAIN_WINDOW {
-                    let dialog_open = window
-                        .app_handle()
-                        .try_state::<AppState>()
-                        .map(|s| s.dialog_open.load(std::sync::atomic::Ordering::SeqCst))
-                        .unwrap_or(false);
-                    if !dialog_open {
+            if window.label() != MAIN_WINDOW {
+                return;
+            }
+            match event {
+                WindowEvent::Focused(false) => {
+                    // Only the popover dismisses itself on blur — and not when the
+                    // blur came from a native dialog we opened (the folder picker
+                    // steals focus). In "window" mode clicking away leaves the
+                    // window alone, like any ordinary desktop app.
+                    let hide = window.app_handle().try_state::<AppState>().is_some_and(|s| {
+                        !s.dialog_open.load(std::sync::atomic::Ordering::SeqCst)
+                            && s.settings.lock().is_ok_and(|g| g.window_mode == "popover")
+                    });
+                    if hide {
                         let _ = window.hide();
                     }
                 }
+                // "window" mode has a titlebar close button, which quits. Hiding
+                // instead is the trap: on a desktop with no tray and no hotkey
+                // that strands the app running, invisible and unquittable.
+                // The popover has no decorations, so it never gets here.
+                WindowEvent::CloseRequested { .. } => window.app_handle().exit(0),
+                _ => {}
             }
         })
         .setup(|app| {
@@ -105,9 +121,9 @@ pub fn run() {
                 .map_err(|e| e.to_string())?
                 .join("settings.json");
             let app_state = AppState::load(config_path, platform::default_toggle_shortcut());
-            let saved_shortcut = {
+            let (saved_shortcut, window_mode) = {
                 let s = app_state.settings.lock().unwrap();
-                s.shortcut.clone()
+                (s.shortcut.clone(), s.window_mode.clone())
             };
             // The OS is the source of truth for autostart: update_settings only
             // writes it when the checkbox changes, so a LaunchAgent removed outside
@@ -131,25 +147,19 @@ pub fn run() {
             }
             app.manage(app_state);
 
-            // Tray icon: left-click toggles the popover under the icon.
-            let tray = TrayIconBuilder::with_id(MAIN_WINDOW)
-                .icon(app.default_window_icon().unwrap().clone())
-                .show_menu_on_left_click(false)
-                .on_tray_icon_event(|tray, event| {
-                    // Cache the tray position so Position::TrayCenter works.
-                    tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        if let Some(window) = tray.app_handle().get_webview_window(MAIN_WINDOW) {
-                            toggle_popover(&window);
-                        }
-                    }
-                })
-                .build(app)?;
+            // The window is created hidden and popover-shaped (tauri.conf.json).
+            // In "window" mode it's an ordinary app instead, so launching it has
+            // to actually put a window on screen — that launcher entry is the
+            // primary way in wherever there's no tray.
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+                apply_window_mode(&window, &window_mode);
+                if window_mode != "popover" {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+
+            let tray = platform::build_tray(app)?;
             platform::make_tray_template(&tray);
 
             // Global shortcut to toggle the popover from anywhere. We only ever

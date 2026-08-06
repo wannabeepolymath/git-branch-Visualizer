@@ -263,3 +263,13 @@ body {
   border-radius: 10px;
   overflow: hidden;
 }
+
+/*
+ * The window is created transparent on every platform — Tauri v2 has no
+ * set_transparent and tauri.conf.json's window config isn't per-platform — so on
+ * Linux without a compositor the rounded corners paint black. Squaring #root makes
+ * the opaque surface fill the frame, so the transparent edge is never visible.
+ */
+:root[data-platform="linux"] #root {
+  border-radius: 0;
+}

@@ -9,9 +9,11 @@ import {
   THEME_NAMES,
   updateSettings,
   type OpenTarget,
+  type PlatformInfo,
   type RepoInfo,
   type Settings,
   type ThemeName,
+  type WindowMode,
 } from "../lib/ipc";
 import { PromptPopover } from "./ContextMenu";
 
@@ -54,6 +56,12 @@ const MAC_MOD_SYMBOLS: Record<string, string> = { Ctrl: "⌃", Alt: "⌥", Shift
 function displayShortcut(s: string): string {
   return IS_MAC ? s.split("+").map((p) => MAC_MOD_SYMBOLS[p] ?? p).join("") : s;
 }
+
+// Linux only: one window with different flags, not two interaction models.
+const WINDOW_MODES: { mode: WindowMode; label: string }[] = [
+  { mode: "window", label: "Regular window" },
+  { mode: "popover", label: "Tray popover" },
+];
 
 const SECTION_IDS = [
   "repos",
@@ -324,11 +332,13 @@ function UpdatesBody() {
 
 export function SettingsView({
   settings,
+  platform,
   onSettingsChange,
   onAddRepo,
   onToast,
 }: {
   settings: Settings;
+  platform: PlatformInfo;
   onSettingsChange: (s: Settings) => void;
   onAddRepo: () => void;
   onToast: (msg: string) => void;
@@ -481,17 +491,48 @@ export function SettingsView({
               id="shortcut-recorder"
               type="button"
               aria-label="Global shortcut recorder. Focus and press a key combination to set it."
+              disabled={!platform.shortcutSupported}
               onClick={(e) => e.currentTarget.focus()} // macOS WebKit doesn't focus buttons on click
               onFocus={() => setRecording(true)}
               onBlur={() => setRecording(false)}
               onKeyDown={onShortcutKeyDown}
-              className={`w-full rounded-md border bg-surface px-2 py-1.5 text-left text-[12px] outline-none ${
+              className={`w-full rounded-md border bg-surface px-2 py-1.5 text-left text-[12px] outline-none disabled:text-faint disabled:hover:border-edge ${
                 recording ? "border-accent text-accent" : "border-edge text-fg hover:border-muted"
               }`}
             >
               {recording ? "Press a key combination… (Esc to cancel)" : displayShortcut(settings.shortcut)}
             </button>
+            {!platform.shortcutSupported && (
+              <p className="mt-1 text-[10px] text-faint">
+                Global shortcuts require an X11 session.
+              </p>
+            )}
           </div>
+          {/* Linux only: macOS already has a working tray popover, so a mode
+              switch there would be UI nobody asked for. */}
+          {platform.platform === "linux" && (
+            <fieldset className="pb-1">
+              <legend className="mb-1 px-3 text-[11px] text-muted">Window mode</legend>
+              {WINDOW_MODES.map(({ mode, label }) => (
+                <label
+                  key={mode}
+                  className="flex items-center gap-2.5 px-3 py-2 text-[12px] text-fg hover:bg-hover"
+                >
+                  <input
+                    type="radio"
+                    name="window-mode"
+                    className="size-3.5 shrink-0 accent-accent"
+                    checked={settings.windowMode === mode}
+                    onChange={() => void patch({ windowMode: mode })}
+                  />
+                  {label}
+                </label>
+              ))}
+              <p className="px-3 pt-0.5 text-[10px] leading-relaxed text-faint">
+                Tray popover needs a system tray — GNOME requires the AppIndicator extension.
+              </p>
+            </fieldset>
+          )}
           <label className="flex items-center gap-2.5 px-3 py-2 text-[12px] text-fg hover:bg-hover">
             <input
               type="checkbox"

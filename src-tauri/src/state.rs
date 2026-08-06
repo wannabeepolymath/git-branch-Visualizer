@@ -46,10 +46,27 @@ pub struct Settings {
     pub open_targets: Vec<OpenTarget>,
     #[serde(default = "default_open_target_id")]
     pub default_open_target: Option<String>,
+    /// "popover" (frameless, on top, hides on blur) or "window" (an ordinary
+    /// decorated desktop window). One window, four flags — see `apply_window_mode`.
+    #[serde(default = "default_window_mode")]
+    pub window_mode: String,
 }
 
 fn default_true() -> bool {
     true
+}
+
+/// Linux defaults to `window`: it's the only mode that's always reachable there,
+/// since stock GNOME has no tray and Wayland has no hotkey.
+fn default_window_mode() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        "popover".to_string()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "window".to_string()
+    }
 }
 
 // ponytail: macOS defaults (v1 target). `open` is macOS-only; move these behind
@@ -84,6 +101,7 @@ impl Settings {
             confirm_actions: true,
             open_targets: default_open_targets(),
             default_open_target: default_open_target_id(),
+            window_mode: default_window_mode(),
         }
     }
 }
@@ -195,6 +213,22 @@ mod tests {
         let s: Settings = serde_json::from_str(json).expect("old config should still parse");
         assert_eq!(s.open_targets.len(), 3);
         assert_eq!(s.default_open_target.as_deref(), Some("terminal"));
+    }
+
+    #[test]
+    fn old_config_without_window_mode_gets_the_platform_default() {
+        // windowMode arrived with the Linux port; every existing settings.json
+        // predates it and must load with the mode this platform actually wants.
+        let json = r#"{
+            "repos": [], "activeRepoId": null, "shortcut": "Alt+Shift+G",
+            "launchAtLogin": false, "theme": "midnight",
+            "commitsPerPage": 200, "showRemoteBranches": true
+        }"#;
+        let s: Settings = serde_json::from_str(json).expect("old config should still parse");
+        #[cfg(target_os = "macos")]
+        assert_eq!(s.window_mode, "popover");
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(s.window_mode, "window");
     }
 
     /// Fresh empty dir under the system temp dir, named after the test.

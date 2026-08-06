@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouse
 import {
   addRepo,
   getBranches,
+  getPlatformInfo,
   getWorktrees,
   getSettings,
   normalizeTheme,
@@ -11,6 +12,7 @@ import {
   recenterWindow,
   setActiveRepo,
   type BranchInfo,
+  type PlatformInfo,
   type Settings,
   type WorktreeInfo,
 } from "./lib/ipc";
@@ -24,6 +26,7 @@ const DEFAULT_SIDEBAR_WIDTH = 168;
 
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [platform, setPlatform] = useState<PlatformInfo | null>(null);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   // Path of the worktree the app is acting on. "" means "not yet resolved" — the
@@ -117,6 +120,24 @@ export default function App() {
     getSettings()
       .then(setSettings)
       .catch((e: unknown) => show(String(e)));
+  }, [show]);
+
+  // Platform: fetched once (nothing in it changes while the app runs) and mirrored
+  // onto <html> as `data-platform`, which index.css uses to square the Linux corners.
+  useEffect(() => {
+    getPlatformInfo()
+      .then((p) => {
+        setPlatform(p);
+        document.documentElement.setAttribute("data-platform", p.platform);
+      })
+      .catch((e: unknown) => {
+        show(String(e));
+        // The render gate below waits on `platform`, so leaving it null on failure
+        // would hang the whole app on its loading state. Nothing here is load-bearing
+        // — square corners and one Settings row — so degrade to the macOS shape and
+        // let the toast report the failure.
+        setPlatform({ platform: "macos", shortcutSupported: true });
+      });
   }, [show]);
 
   // Theme: each visual identity is a full palette selected by `data-theme` on <html>.
@@ -233,7 +254,7 @@ export default function App() {
     [show],
   );
 
-  if (!settings) {
+  if (!settings || !platform) {
     return (
       <main className="flex h-screen w-screen items-center justify-center bg-surface select-none">
         <span className="text-[12px] text-faint">Loading…</span>
@@ -262,6 +283,7 @@ export default function App() {
       {view === "settings" ? (
         <SettingsView
           settings={settings}
+          platform={platform}
           onSettingsChange={setSettings}
           onAddRepo={() => void addRepository()}
           onToast={show}

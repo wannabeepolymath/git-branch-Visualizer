@@ -3,22 +3,58 @@ name: Release
 # Push a tag (v1.0.3) to publish a release. tauri-action uploads the .app.tar.gz
 # + .sig the updater downloads, plus the latest.json it reads from
 # releases/latest/download/latest.json (the endpoint in tauri.conf.json).
+#
+# Both matrix legs publish to the same tagName, so they share one release.
+# tauri-action re-reads latest.json off that release and merges its own platform
+# entries into it (with retries for the race), so the file ends up holding both
+# the darwin and linux-x86_64 entries rather than whichever leg finished last.
 on:
   push:
     tags: ["v*"]
 
 jobs:
   release:
-    runs-on: macos-latest
     permissions:
       contents: write
+    strategy:
+      # One platform failing shouldn't cancel the other: finishing a release by
+      # re-running a single leg beats rebuilding both.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            rustTargets: aarch64-apple-darwin,x86_64-apple-darwin
+            # One universal binary keeps latest.json to a single darwin entry.
+            args: --target universal-apple-darwin
+          # 22.04 deliberately, not ubuntu-latest: 24.04 links a newer glibc and
+          # the resulting binaries refuse to start on older distros.
+          - platform: ubuntu-22.04
+            rustTargets: x86_64-unknown-linux-gnu
+            args: ""
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+      # webkit2gtk is the webview, ayatana-appindicator the tray, libxdo the
+      # global shortcut backend; rsvg + patchelf are AppImage bundling. A
+      # missing one of these surfaces as an opaque pkg-config failure.
+      - name: Install Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            build-essential \
+            curl wget file patchelf xdg-utils
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ matrix.rustTargets }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -30,5 +66,8 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Branch Visualizer ${{ github.ref_name }}
-          # One universal binary keeps latest.json to a single darwin entry.
-          args: --target universal-apple-darwin
+          # tauri.release.conf.json turns on the signed updater artifact. It stays
+          # out of tauri.conf.json so a plain `tauri build` needs no private key —
+          # Homebrew compiles from source on the user's machine, where the key
+          # doesn't exist and its absence is a hard error.
+          args: ${{ matrix.args }} --config src-tauri/tauri.release.conf.json

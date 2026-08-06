@@ -62,16 +62,34 @@ pub fn quit(app: AppHandle) {
 #[tauri::command]
 pub fn recenter_window(app: AppHandle) -> Result<(), String> {
     use tauri::{LogicalSize, Manager};
-    use tauri_plugin_positioner::{Position, WindowExt};
     let window = app
         .get_webview_window(crate::MAIN_WINDOW)
         .ok_or("main window not found")?;
     window
         .set_size(LogicalSize::new(420.0, 560.0))
         .map_err(|e| e.to_string())?;
-    window
-        .move_window(Position::TrayCenter)
-        .map_err(|e| e.to_string())
+    crate::platform::anchor_window(&window);
+    Ok(())
+}
+
+/// The two values that depend on where we're running. Deliberately NOT fields on
+/// `Settings`: that struct is also the `update_settings` round-trip payload, so a
+/// read-only field parked there would be echoed back and persisted as junk.
+/// Neither value changes while the app runs — the frontend fetches this once.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformInfo {
+    platform: &'static str,
+    shortcut_supported: bool,
+}
+
+#[tauri::command]
+pub fn get_platform_info() -> PlatformInfo {
+    PlatformInfo {
+        // "macos" | "linux" | "windows", straight from the compiler.
+        platform: std::env::consts::OS,
+        shortcut_supported: crate::platform::shortcut_supported(),
+    }
 }
 
 #[tauri::command]
@@ -100,6 +118,14 @@ pub fn update_settings(
             al.enable().map_err(|e| e.to_string())?;
         } else {
             al.disable().map_err(|e| e.to_string())?;
+        }
+    }
+
+    // Window mode is four window flags applied live — no restart, no second window.
+    if settings.window_mode != old.window_mode {
+        use tauri::Manager;
+        if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) {
+            crate::apply_window_mode(&window, &settings.window_mode);
         }
     }
 
