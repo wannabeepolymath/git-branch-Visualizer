@@ -69,23 +69,43 @@ fn default_window_mode() -> String {
     }
 }
 
-// ponytail: macOS defaults (v1 target). `open` is macOS-only; move these behind
-// platform:: when Windows/Linux seeds are needed.
+// ponytail: not(macos) means Linux here; a Windows port needs its own arm.
 fn default_open_targets() -> Vec<OpenTarget> {
     let t = |id: &str, name: &str, command: &str| OpenTarget {
         id: id.to_string(),
         name: name.to_string(),
         command: command.to_string(),
     };
+    #[cfg(target_os = "macos")]
+    let (terminal, files_name, files) = ("open -a Terminal {path}", "Finder", "open {path}");
+    // `open` is a macOS binary — seeding it elsewhere leaves the ↗ button dead on
+    // arrival. `substitute_path` replaces `{path}` inside a token, so the
+    // --working-directory flag survives as one argument.
+    #[cfg(not(target_os = "macos"))]
+    let (terminal, files_name, files) = (
+        "x-terminal-emulator --working-directory={path}",
+        "Files",
+        "xdg-open {path}",
+    );
     vec![
         t("editor", "Editor", "code {path}"),
-        t("terminal", "Terminal", "open -a Terminal {path}"),
-        t("finder", "Finder", "open {path}"),
+        t("terminal", "Terminal", terminal),
+        t("finder", files_name, files),
     ]
 }
 
+/// The one-click ↗ has to work on a fresh install. `xdg-open` ships with
+/// xdg-utils; `x-terminal-emulator` is a Debian alternatives link that Fedora and
+/// Arch don't have, so it's a target to edit, not one to point the button at.
 fn default_open_target_id() -> Option<String> {
-    Some("terminal".to_string())
+    #[cfg(target_os = "macos")]
+    {
+        Some("terminal".to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Some("finder".to_string())
+    }
 }
 
 impl Settings {
@@ -204,7 +224,7 @@ mod tests {
     #[test]
     fn old_config_gets_seeded_open_targets() {
         // A config written before open targets existed must load with them seeded,
-        // defaulting the one-click target to the editor.
+        // pointing the one-click target at a command this platform can run.
         let json = r#"{
             "repos": [], "activeRepoId": null, "shortcut": "Alt+Shift+G",
             "launchAtLogin": false, "theme": "graphite",
@@ -212,7 +232,10 @@ mod tests {
         }"#;
         let s: Settings = serde_json::from_str(json).expect("old config should still parse");
         assert_eq!(s.open_targets.len(), 3);
+        #[cfg(target_os = "macos")]
         assert_eq!(s.default_open_target.as_deref(), Some("terminal"));
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(s.default_open_target.as_deref(), Some("finder"));
     }
 
     #[test]

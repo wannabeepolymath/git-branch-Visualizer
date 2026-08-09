@@ -9,7 +9,7 @@ mod state;
 mod watcher;
 
 use state::AppState;
-use tauri::{Manager, Runtime, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
 const MAIN_WINDOW: &str = "main";
@@ -21,6 +21,26 @@ fn apply_window_mode<R: Runtime>(window: &WebviewWindow<R>, mode: &str) {
     let _ = window.set_decorations(!popover);
     let _ = window.set_always_on_top(popover);
     let _ = window.set_skip_taskbar(popover);
+}
+
+/// Show the window, recording that it is now placed. The startup show and the
+/// Linux tray's "Show" item bypass `toggle_popover`; without this the next hotkey
+/// toggle counts as the first show and yanks the window back to the tray/centre.
+pub(crate) fn show_window<R: Runtime>(window: &WebviewWindow<R>) {
+    if let Some(s) = window.app_handle().try_state::<AppState>() {
+        s.positioned.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Whether the popover is allowed to hide itself: popover mode, on a session where
+/// something can bring it back (see `platform::blur_dismiss_is_recoverable`).
+fn popover_can_hide<R: Runtime>(app: &AppHandle<R>) -> bool {
+    platform::blur_dismiss_is_recoverable()
+        && app
+            .try_state::<AppState>()
+            .is_some_and(|s| s.settings.lock().is_ok_and(|g| g.window_mode == "popover"))
 }
 
 /// Show the popover anchored under the tray icon, or hide it if already shown.
@@ -39,8 +59,7 @@ fn toggle_popover<R: Runtime>(window: &WebviewWindow<R>) {
         if first_show {
             platform::anchor_window(window);
         }
-        let _ = window.show();
-        let _ = window.set_focus();
+        show_window(window);
     }
 }
 
@@ -95,20 +114,28 @@ pub fn run() {
                     // blur came from a native dialog we opened (the folder picker
                     // steals focus). In "window" mode clicking away leaves the
                     // window alone, like any ordinary desktop app.
-                    let hide = platform::blur_dismiss_is_recoverable()
-                        && window.app_handle().try_state::<AppState>().is_some_and(|s| {
-                            !s.dialog_open.load(std::sync::atomic::Ordering::SeqCst)
-                                && s.settings.lock().is_ok_and(|g| g.window_mode == "popover")
-                        });
-                    if hide {
+                    let dialog_open = window
+                        .app_handle()
+                        .try_state::<AppState>()
+                        .is_some_and(|s| s.dialog_open.load(std::sync::atomic::Ordering::SeqCst));
+                    if popover_can_hide(window.app_handle()) && !dialog_open {
                         let _ = window.hide();
                     }
                 }
                 // "window" mode has a titlebar close button, which quits. Hiding
                 // instead is the trap: on a desktop with no tray and no hotkey
                 // that strands the app running, invisible and unquittable.
-                // The popover has no decorations, so it never gets here.
-                WindowEvent::CloseRequested { .. } => window.app_handle().exit(0),
+                // A window-manager close (Alt+F4, the window list's "Close") still
+                // reaches an undecorated popover on Linux, and there it means
+                // "dismiss this", not "quit the app".
+                WindowEvent::CloseRequested { api, .. } => {
+                    if popover_can_hide(window.app_handle()) {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    } else {
+                        window.app_handle().exit(0);
+                    }
+                }
                 _ => {}
             }
         })
@@ -151,12 +178,14 @@ pub fn run() {
             // The window is created hidden and popover-shaped (tauri.conf.json).
             // In "window" mode it's an ordinary app instead, so launching it has
             // to actually put a window on screen — that launcher entry is the
-            // primary way in wherever there's no tray.
+            // primary way in wherever there's no tray. A popover gets shown too
+            // where there's no hotkey and maybe no tray to summon it: launching
+            // into a headless process with no route back to the mode setting is
+            // the same one-way door `blur_dismiss_is_recoverable` exists to block.
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
                 apply_window_mode(&window, &window_mode);
-                if window_mode != "popover" {
-                    let _ = window.show();
-                    let _ = window.set_focus();
+                if window_mode != "popover" || !platform::blur_dismiss_is_recoverable() {
+                    show_window(&window);
                 }
             }
 

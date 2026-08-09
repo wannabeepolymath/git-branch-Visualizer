@@ -103,8 +103,7 @@ pub fn build_tray<R: Runtime>(app: &mut App<R>) -> tauri::Result<TrayIcon<R>> {
                 return;
             }
             if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) {
-                let _ = window.show();
-                let _ = window.set_focus();
+                crate::show_window(&window);
             }
             // Settings and the update check are UI, not backend: showing the
             // window is all the tray can do, the frontend does the rest.
@@ -158,7 +157,12 @@ pub fn can_self_update() -> bool {
 
 #[cfg(target_os = "linux")]
 fn is_wayland() -> bool {
-    is_wayland_from(std::env::var("XDG_SESSION_TYPE").ok().as_deref())
+    // A Wayland client finds its compositor through WAYLAND_DISPLAY, which survives
+    // the env filters that drop the per-session XDG_SESSION_TYPE (systemd --user
+    // units, xdg-autostart-generator, sandboxes). Either signal is enough, and
+    // guessing "Wayland" wrongly only costs a disabled shortcut recorder.
+    std::env::var_os("WAYLAND_DISPLAY").is_some()
+        || is_wayland_from(std::env::var("XDG_SESSION_TYPE").ok().as_deref())
 }
 
 /// Split from the env read above so it's testable without a real session.
@@ -188,7 +192,7 @@ mod tests {
         assert!(is_wayland_from(Some("wayland")));
         assert!(is_wayland_from(Some("Wayland")));
         assert!(!is_wayland_from(Some("x11")));
-        // Unset means we can't tell it's Wayland — assume the hotkey works.
+        // Unset, and no WAYLAND_DISPLAY either — assume the hotkey works.
         assert!(!is_wayland_from(None));
     }
 }
