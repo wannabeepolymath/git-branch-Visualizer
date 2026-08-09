@@ -59,13 +59,25 @@ asset_url() {
 
 # dpkg/rpm rather than apt/dnf: the package database is what decides whether a
 # .deb or .rpm is the right artifact, not which frontend happens to be installed.
-if have dpkg; then fmt=deb
-elif have rpm; then fmt=rpm
+# So ask the database, not just the binary — dpkg is an ordinary package on
+# Fedora (alien, cross-packaging) and rpm is one on Debian, and either binary
+# alone would route the install into a database that does not run the system.
+if have dpkg && dpkg-query -W dpkg >/dev/null 2>&1; then fmt=deb
+elif have rpm && rpm -q rpm >/dev/null 2>&1; then fmt=rpm
 else fmt=appimage
 fi
 
+# sudo is the one privileged dependency, and only the package paths need it.
+# Root containers and netinsts often ship without it, where the bare call would
+# be an exit-127 after the download rather than something the user can act on.
+if [ "$fmt" != appimage ]; then
+  if [ "$(id -u)" -eq 0 ]; then sudo() { "$@"; }
+  else have sudo || die "sudo is required for the $fmt install — run this as root, or install sudo"
+  fi
+fi
+
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT INT TERM
+trap 'rm -rf "$tmp"; [ -n "${target:-}" ] && rm -f "$target.part"' EXIT INT TERM
 
 case "$fmt" in
   deb)
@@ -98,14 +110,25 @@ case "$fmt" in
     target=$bindir/branch-visualizer
     mkdir -p "$bindir" "$appdir"
     say "Downloading $version (AppImage)"
-    curl -fsSL "$url" -o "$target"
-    chmod +x "$target"
+    # Stage next to the target, never onto it: a download that drops halfway
+    # would otherwise leave a truncated file still marked executable, and the
+    # rename also swaps under a running app instead of failing with ETXTBSY.
+    # It has to be $bindir — across mounts mv degrades to copy-in-place.
+    curl -fsSL "$url" -o "$target.part"
+    chmod +x "$target.part"
+    mv -f "$target.part" "$target"
 
     # An AppImage ships no launcher entry, and on Linux the applications menu is
     # the app's primary entry point — it is a window, not a tray popover. Without
     # this the download would be effectively unlaunchable for most users.
     icon=""
-    if (cd "$tmp" && "$target" --appimage-extract .DirIcon >/dev/null 2>&1) &&
+    # .DirIcon is a symlink to a sibling PNG at the AppDir root, and a
+    # pattern-limited extract unpacks the link but not what it points at, so the
+    # root PNGs have to be asked for too or the copy below always dangles. The
+    # glob stops at / (FNM_PATHNAME), so it cannot drag in the hicolor tree.
+    if (cd "$tmp" &&
+        "$target" --appimage-extract .DirIcon >/dev/null 2>&1 &&
+        "$target" --appimage-extract '*.png' >/dev/null 2>&1) &&
        [ -f "$tmp/squashfs-root/.DirIcon" ]; then
       icon=$HOME/.local/share/icons/branch-visualizer.png
       mkdir -p "$(dirname "$icon")"
