@@ -34,6 +34,17 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+      # tauri-action writes latest.json's version from tauri.conf.json, never from
+      # the tag. A tag pushed without the bump publishes a release every installed
+      # copy reads as "not newer", so the updater silently never fires — fail here
+      # in seconds instead of shipping a dead latest.json.
+      - name: Tag must match app version
+        run: |
+          cfg=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          [ "$GITHUB_REF_NAME" = "v$cfg" ] || {
+            echo "tag $GITHUB_REF_NAME != tauri.conf.json version $cfg — bump the version before tagging"
+            exit 1
+          }
       # webkit2gtk is the webview, ayatana-appindicator the tray, libxdo the
       # global shortcut backend; rsvg + patchelf are AppImage bundling. A
       # missing one of these surfaces as an opaque pkg-config failure.

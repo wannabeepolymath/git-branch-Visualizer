@@ -47,6 +47,8 @@ then re-run the install.
 curl -fsSL https://raw.githubusercontent.com/wannabeepolymath/git-branch-Visualizer/main/install.sh | sh
 ```
 
+> Needs a release that actually carries Linux artifacts, and the first one is `v1.2.0`. Until that tag is published, `latest` still resolves to the macOS-only `v1.1.0` and the script exits with `no .deb in release v1.1.0` — build from source until then.
+
 x86_64 only for the beta. The script picks the format your system actually uses — `.deb` where dpkg exists, `.rpm` where rpm does, AppImage otherwise — and installs it. The deb and rpm paths call `sudo` and will prompt; the AppImage path is entirely userspace (`~/.local/bin`) and needs no password. To install a specific release, including a prerelease that `latest` skips:
 
 ```sh
@@ -115,10 +117,11 @@ necessarily points at the AppImage. A deb-installed binary would be handed those
 and reject them. Serving all three would need a `{{bundle_type}}`-templated endpoint
 with a JSON file per format — more release machinery than a beta earns.
 
-Publishing a release is one push:
+Publishing a release is a version bump plus a tag. `latest.json` takes its version from `tauri.conf.json`, not from the tag, so CI refuses a tag that doesn't match it — a mismatch would otherwise publish a release every installed copy reads as "not newer" and silently never installs:
 
 ```sh
-git tag v1.0.3 && git push origin v1.0.3
+# bump "version" in src-tauri/tauri.conf.json, package.json, and src-tauri/Cargo.toml
+git commit -am "v1.2.1: ..." && git tag v1.2.1 && git push origin main v1.2.1
 ```
 
 `.github/workflows/release.yml` builds a macOS universal binary plus the Linux x86_64 bundles, signs them, and uploads the artifacts plus `latest.json`. The Linux leg pins `ubuntu-22.04` rather than `ubuntu-latest` on purpose: linking against 24.04's glibc produces a binary that will not start on older distros. It needs one repo secret, `TAURI_SIGNING_PRIVATE_KEY` — the contents of the minisign private key whose public half is `plugins.updater.pubkey` in `tauri.conf.json`. Lose that key and no future build can produce an update the shipped app will accept.
