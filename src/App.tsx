@@ -35,6 +35,8 @@ export default function App() {
   const [focusedWorktree, setFocusedWorktree] = useState<string>("");
   const [selectedRefs, setSelectedRefs] = useState<string[]>([]);
   const [view, setView] = useState<"main" | "settings">("main");
+  // Tray "Check for updates" signal. A counter, not a flag, so every click re-checks.
+  const [checkUpdates, setCheckUpdates] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showSidebar, setShowSidebar] = useState(() => localStorage.getItem("bv.sidebar") !== "0");
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -124,7 +126,7 @@ export default function App() {
   }, [show]);
 
   // Platform: fetched once (nothing in it changes while the app runs) and mirrored
-  // onto <html> as `data-platform`, which index.css uses to square the Linux corners.
+  // onto <html> as `data-platform`, which index.css uses to round the corners on macOS.
   useEffect(() => {
     getPlatformInfo()
       .then((p) => {
@@ -135,7 +137,8 @@ export default function App() {
         show(String(e));
         // The render gate below waits on `platform`, so leaving it null on failure
         // would hang the whole app on its loading state. Nothing here is load-bearing
-        // — square corners and one Settings row — so degrade to the macOS shape and
+        // — one Settings row, and the unwritten attribute leaves the corners square,
+        // the shape that can't paint black — so degrade to the permissive values and
         // let the toast report the failure.
         setPlatform({ platform: "macos", shortcutSupported: true, canSelfUpdate: true });
       });
@@ -230,14 +233,16 @@ export default function App() {
     };
   }, [refresh]);
 
-  // Linux tray menu. Rust has already shown the window by the time this fires; all
-  // that's left is the view switch. "show" needs nothing further, and "quit" never
-  // arrives here — Rust exits on it directly.
+  // Linux tray menu. Rust has already shown the window by the time this fires, so
+  // "settings" only needs the view switch; "updates" also has to reach the check
+  // itself, or the item is a label that opens a panel and does nothing. "show"
+  // needs nothing further, and "quit" never arrives here — Rust exits on it directly.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let dead = false;
     void onTrayMenu((item) => {
       if (item === "settings" || item === "updates") setView("settings");
+      if (item === "updates") setCheckUpdates((n) => n + 1);
     }).then((f) => {
       if (dead) f();
       else unlisten = f;
@@ -303,6 +308,7 @@ export default function App() {
         <SettingsView
           settings={settings}
           platform={platform}
+          checkUpdates={checkUpdates}
           onSettingsChange={setSettings}
           onAddRepo={() => void addRepository()}
           onToast={show}

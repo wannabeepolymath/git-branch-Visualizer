@@ -228,49 +228,107 @@ type UpdateStatus =
   | { kind: "ready" }
   | { kind: "error"; msg: string };
 
+// Update state lives at module scope because the operation outlives the panel:
+// collapsing the section, the Header back arrow and "Add repository" (which sends
+// the view back to main) all unmount UpdatesBody, while the Rust-side download
+// keeps running and swaps the bundle regardless. Component state would come back
+// as "idle" — no pending-restart row, and a second concurrent install one click
+// away. Only one Updates section exists, so a single subscriber is enough.
+let sharedStatus: UpdateStatus = { kind: "idle" };
+let notifyStatus: ((s: UpdateStatus) => void) | null = null;
+function setShared(s: UpdateStatus) {
+  sharedStatus = s;
+  notifyStatus?.(s);
+}
+
+// Last tray-click counter each of the two effects below acted on. React runs every
+// effect on mount whatever its deps say — deps only gate re-runs — so a counter with
+// no record of what was consumed would replay the last click on every Settings mount:
+// an unasked-for network check and the Updates section forced open over the user's
+// persisted collapse. Two trackers because child effects run before the parent's, and
+// one shared tracker would let UpdatesBody swallow the trigger that reveals the section.
+let openHandled = 0;
+let checkHandled = 0;
+
+// "ready" counts as busy: re-checking from there discards the only Restart button,
+// and check() would just find the same update again — the running binary keeps its
+// old version until the relaunch.
+const isBusy = (s: UpdateStatus) =>
+  s.kind === "checking" || s.kind === "downloading" || s.kind === "ready";
+
 /**
  * Check → download → restart, against the GitHub Releases endpoint configured in
  * tauri.conf.json. Downloading replaces the .app bundle in place; the new binary
  * only runs after a relaunch, hence the two-step flow.
  */
-function UpdatesBody({ canSelfUpdate }: { canSelfUpdate: boolean }) {
+function UpdatesBody({ canSelfUpdate, autoCheck }: { canSelfUpdate: boolean; autoCheck: number }) {
   const [version, setVersion] = useState("");
-  const [status, setStatus] = useState<UpdateStatus>({ kind: "idle" });
+  const [status, setStatus] = useState<UpdateStatus>(sharedStatus);
   useEffect(() => {
     void getVersion().then(setVersion);
   }, []);
+  useEffect(() => {
+    notifyStatus = setStatus;
+    setStatus(sharedStatus); // catch up on whatever finished while unmounted
+    return () => {
+      notifyStatus = null;
+    };
+  }, []);
 
-  const busy = status.kind === "checking" || status.kind === "downloading";
+  const busy = isBusy(status);
 
   const runCheck = async () => {
-    setStatus({ kind: "checking" });
+    // Each check that finds an update allocates an entry in Rust's resource table;
+    // dropping the handle strands it for the life of the process.
+    const prev = sharedStatus;
+    if (prev.kind === "available") void prev.update.close().catch(() => {});
+    setShared({ kind: "checking" });
     try {
-      const update = await check();
-      setStatus(update ? { kind: "available", update } : { kind: "none" });
+      // The plugin defaults to no timeout, so a captive portal that accepts the
+      // connection and never answers leaves "Checking…" up with the button
+      // disabled forever. Metadata that hasn't arrived in 30s is not coming.
+      const update = await check({ timeout: 30_000 });
+      setShared(update ? { kind: "available", update } : { kind: "none" });
     } catch (e) {
-      setStatus({ kind: "error", msg: String(e) });
+      setShared({ kind: "error", msg: String(e) });
     }
   };
 
+  // The Linux tray's "Check for updates" item, which App forwards as a counter so a
+  // second click re-checks. Reads the shared status rather than `busy` so it can't
+  // clobber a download that started before this mount.
+  useEffect(() => {
+    if (autoCheck > checkHandled && canSelfUpdate && !isBusy(sharedStatus)) {
+      checkHandled = autoCheck;
+      void runCheck();
+    }
+  }, [autoCheck]);
+
   const install = async (update: Update) => {
-    setStatus({ kind: "downloading", pct: null });
+    setShared({ kind: "downloading", pct: null });
     let total = 0;
     let got = 0;
     try {
-      await update.downloadAndInstall((e) => {
-        if (e.event === "Started") {
-          total = e.data.contentLength ?? 0;
-        } else if (e.event === "Progress") {
-          got += e.data.chunkLength;
-          setStatus({
-            kind: "downloading",
-            pct: total ? Math.round((got / total) * 100) : null,
-          });
-        }
-      });
-      setStatus({ kind: "ready" });
+      await update.downloadAndInstall(
+        (e) => {
+          if (e.event === "Started") {
+            total = e.data.contentLength ?? 0;
+          } else if (e.event === "Progress") {
+            got += e.data.chunkLength;
+            setShared({
+              kind: "downloading",
+              pct: total ? Math.round((got / total) * 100) : null,
+            });
+          }
+        },
+        // Also unbounded by default, and a stalled download now sticks around
+        // across unmounts. reqwest's timeout covers the whole response body, so
+        // this has to clear a legitimate multi-megabyte fetch on a slow line.
+        { timeout: 600_000 },
+      );
+      setShared({ kind: "ready" });
     } catch (e) {
-      setStatus({ kind: "error", msg: String(e) });
+      setShared({ kind: "error", msg: String(e) });
     }
   };
 
@@ -348,12 +406,15 @@ function UpdatesBody({ canSelfUpdate }: { canSelfUpdate: boolean }) {
 export function SettingsView({
   settings,
   platform,
+  checkUpdates,
   onSettingsChange,
   onAddRepo,
   onToast,
 }: {
   settings: Settings;
   platform: PlatformInfo;
+  /** Bumped by App when the Linux tray's "Check for updates" item is clicked. */
+  checkUpdates: number;
   onSettingsChange: (s: Settings) => void;
   onAddRepo: () => void;
   onToast: (msg: string) => void;
@@ -371,6 +432,14 @@ export function SettingsView({
       localStorage.setItem(OPEN_STORAGE_KEY, [...next].join(","));
       return next;
     });
+  // The tray item points at a section a fresh install has collapsed (loadOpenSections
+  // opens only Repositories), so reveal it — UpdatesBody runs the check once mounted.
+  useEffect(() => {
+    if (checkUpdates > openHandled) {
+      openHandled = checkUpdates;
+      setOpenSections((prev) => new Set(prev).add("updates"));
+    }
+  }, [checkUpdates]);
   const [cppText, setCppText] = useState(String(settings.commitsPerPage));
   useEffect(() => setCppText(String(settings.commitsPerPage)), [settings.commitsPerPage]);
   // Local copy for smooth typing; persisted on blur (like commits-per-page).
@@ -543,8 +612,14 @@ export function SettingsView({
                   {label}
                 </label>
               ))}
+              {/* Under Wayland popover mode only strips the titlebar: blur-dismiss is
+                  X11-gated in Rust, and always-on-top/skip-taskbar aren't in the
+                  protocol and fail silently. Warned rather than hidden — hiding the
+                  radios would strand anyone already in popover mode. */}
               <p className="px-3 pt-0.5 text-[10px] leading-relaxed text-faint">
                 Tray popover needs a system tray — GNOME requires the AppIndicator extension.
+                {!platform.shortcutSupported &&
+                  " Hiding on blur and staying on top need an X11 session."}
               </p>
             </fieldset>
           )}
@@ -703,7 +778,7 @@ export function SettingsView({
           open={openSections.has("updates")}
           onToggle={() => toggleSection("updates")}
         >
-          <UpdatesBody canSelfUpdate={platform.canSelfUpdate} />
+          <UpdatesBody canSelfUpdate={platform.canSelfUpdate} autoCheck={checkUpdates} />
         </Section>
 
         <Section
