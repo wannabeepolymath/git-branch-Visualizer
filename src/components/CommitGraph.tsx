@@ -625,6 +625,7 @@ export function CommitGraph({
   refreshKey,
   confirmActions,
   theme,
+  search,
   onToast,
   onChanged,
 }: {
@@ -635,6 +636,7 @@ export function CommitGraph({
   refreshKey: number;
   confirmActions: boolean;
   theme: ThemeName;
+  search: string; // raw text from the header's search box
   onToast: (msg: string) => void;
   onChanged: () => void;
 }) {
@@ -647,7 +649,6 @@ export function CommitGraph({
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; commit: CommitInfo } | null>(null);
   const [prompt, setPrompt] = useState<{ x: number; y: number; hash: string } | null>(null);
-  const [search, setSearch] = useState("");
   const [query, setQuery] = useState(""); // debounced `search`; drives the log query
   useEffect(() => {
     const t = setTimeout(() => setQuery(search.trim()), 250);
@@ -890,19 +891,6 @@ export function CommitGraph({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-edge px-3 py-1.5">
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setSearch("");
-          }}
-          placeholder="Search commit message or hash…"
-          aria-label="Search commits"
-          className="w-full rounded border border-edge bg-panel2 px-2 py-1 text-[12px] outline-none placeholder:text-faint focus:border-accent"
-        />
-      </div>
       <WorkingChanges
         repoId={repoId}
         worktreePath={worktreePath}

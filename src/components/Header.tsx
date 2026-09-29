@@ -31,6 +31,15 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
 function PullIcon({ spinning }: { spinning: boolean }) {
   return (
     <svg
@@ -146,6 +155,8 @@ export function Header({
   focusedWorktreeLabel,
   worktreeArg,
   onClearFocus,
+  commitSearch,
+  onCommitSearch,
 }: {
   settings: Settings;
   activeRepo: RepoInfo | null;
@@ -163,8 +174,15 @@ export function Header({
   /** Focused worktree path for pull; undefined = the repo's main worktree. */
   worktreeArg?: string;
   onClearFocus: () => void;
+  commitSearch: string;
+  onCommitSearch: (q: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const closeSearch = () => {
+    onCommitSearch("");
+    setSearchOpen(false);
+  };
   const [fetching, setFetching] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [quitConfirm, setQuitConfirm] = useState<{ x: number; y: number } | null>(null);
@@ -307,6 +325,40 @@ export function Header({
 
       {!inSettings && (
         <>
+          {searchOpen ? (
+            <div className="flex h-6 w-44 min-w-0 shrink items-center gap-1.5 rounded border border-edge bg-panel2 px-1.5 text-faint focus-within:border-accent">
+              <SearchIcon />
+              <input
+                autoFocus
+                value={commitSearch}
+                onChange={(e) => onCommitSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") closeSearch();
+                }}
+                // Collapse back to the icon only when there's nothing to keep showing.
+                onBlur={() => {
+                  if (commitSearch === "") setSearchOpen(false);
+                }}
+                placeholder="Message or hash…"
+                aria-label="Search commits"
+                className="min-w-0 flex-1 bg-transparent text-[12px] text-fg outline-none placeholder:text-faint"
+              />
+              {commitSearch !== "" && (
+                <button
+                  aria-label="Clear search"
+                  onMouseDown={(e) => e.preventDefault()} // keep focus in the input
+                  onClick={closeSearch}
+                  className="shrink-0 text-[11px] leading-none hover:text-fg"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ) : (
+            <IconButton label="Search commits" disabled={!activeRepo} onClick={() => setSearchOpen(true)}>
+              <SearchIcon />
+            </IconButton>
+          )}
           <IconButton label="Fetch" disabled={!activeRepo || fetching} onClick={doFetch}>
             <RefreshIcon spinning={fetching} />
           </IconButton>

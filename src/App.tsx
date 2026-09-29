@@ -38,6 +38,7 @@ export default function App() {
   // Tray "Check for updates" signal. A counter, not a flag, so every click re-checks.
   const [checkUpdates, setCheckUpdates] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [commitSearch, setCommitSearch] = useState(""); // typed in Header, applied by CommitGraph
   const [showSidebar, setShowSidebar] = useState(() => localStorage.getItem("bv.sidebar") !== "0");
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const n = Number(localStorage.getItem("bv.sidebarWidth"));
@@ -303,6 +304,8 @@ export default function App() {
         focusedWorktreeLabel={focusedWorktreeLabel}
         worktreeArg={worktreeArg}
         onClearFocus={clearFocus}
+        commitSearch={commitSearch}
+        onCommitSearch={setCommitSearch}
       />
       {view === "settings" ? (
         <SettingsView
@@ -367,6 +370,7 @@ export default function App() {
             refreshKey={refreshKey}
             confirmActions={settings.confirmActions}
             theme={theme}
+            search={commitSearch}
             onToast={show}
             onChanged={refresh}
           />
