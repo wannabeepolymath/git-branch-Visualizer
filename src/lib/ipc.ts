@@ -150,7 +150,8 @@ export const getLog = (
   refs: string[], // empty = all branches/remotes/tags
   skip: number,
   limit: number,
-): Promise<CommitInfo[]> => invoke("get_log", { repoId, refs, skip, limit });
+  query = "", // message text, or a ≥7-char hash prefix
+): Promise<CommitInfo[]> => invoke("get_log", { repoId, refs, skip, limit, query });
 
 export const getCommit = (repoId: string, hash: string): Promise<CommitDetail> =>
   invoke("get_commit", { repoId, hash });

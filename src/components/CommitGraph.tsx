@@ -288,17 +288,15 @@ function DetailPanel({
       ) : (
         <>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] text-muted select-text">
-              {detail.hash.slice(0, 12)}
-            </span>
             <button
-              className="rounded border border-edge px-1.5 text-[10px] leading-[16px] text-muted hover:bg-hover"
+              title="Copy full hash"
+              className="max-w-full cursor-pointer truncate rounded-sm font-mono text-[11px] text-muted hover:bg-hover hover:text-fg"
               onClick={() => {
                 void navigator.clipboard.writeText(detail.hash);
                 onToast("Hash copied");
               }}
             >
-              Copy hash
+              {detail.hash}
             </button>
           </div>
           <div className="mt-1.5 text-[12px] font-medium select-text">{detail.subject}</div>
@@ -649,6 +647,14 @@ export function CommitGraph({
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; commit: CommitInfo } | null>(null);
   const [prompt, setPrompt] = useState<{ x: number; y: number; hash: string } | null>(null);
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState(""); // debounced `search`; drives the log query
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(search.trim()), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+  // A filtered log has gaps, so lanes can't connect — the rail is hidden while searching.
+  const searching = query !== "";
 
   const containerRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
@@ -674,7 +680,7 @@ export function CommitGraph({
     setDetail(null);
     setScrollTop(0);
     containerRef.current?.scrollTo(0, 0);
-    getLog(repoId, refs, 0, pageSize)
+    getLog(repoId, refs, 0, pageSize, query)
       .then((cs) => {
         if (!live) return;
         setCommits(cs);
@@ -687,7 +693,7 @@ export function CommitGraph({
     return () => {
       live = false;
     };
-  }, [repoId, refsKey, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [repoId, refsKey, pageSize, query]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // External refresh (repo-changed, branch ops): reload the loaded window in place.
   useEffect(() => {
@@ -697,7 +703,7 @@ export function CommitGraph({
     // Deps are [refreshKey] alone, so `live` never trips on a repo/refs switch —
     // only the generation catches a page fetched for the previous target.
     const gen = queryGenRef.current;
-    getLog(repoId, refs, 0, limit)
+    getLog(repoId, refs, 0, limit, query)
       .then((cs) => {
         if (!live || gen !== queryGenRef.current) return;
         setCommits(cs);
@@ -719,13 +725,40 @@ export function CommitGraph({
   }, []);
 
   const { rows, maxLanes } = useMemo(() => layoutGraph(commits), [commits]);
-  const railW = Math.min(maxLanes, MAX_RAIL_LANES) * LANE_W + 4;
+  const fullRailW = maxLanes * LANE_W + 4;
+  // User-dragged rail width; null = auto (capped at MAX_RAIL_LANES). Never wider than the graph needs.
+  const [railOverride, setRailOverride] = useState<number | null>(() => {
+    const n = Number(localStorage.getItem("bv.railWidth"));
+    return n > 0 ? n : null;
+  });
+  const railW = Math.min(railOverride ?? Math.min(maxLanes, MAX_RAIL_LANES) * LANE_W + 4, fullRailW);
+  const startRailResize = (e: MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = railW;
+    const move = (ev: globalThis.MouseEvent) =>
+      setRailOverride(Math.min(Math.max(startW + ev.clientX - startX, LANE_W + 4), fullRailW));
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      setRailOverride((w) => {
+        if (w !== null) localStorage.setItem("bv.railWidth", String(w));
+        return w;
+      });
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+  const resetRail = () => {
+    setRailOverride(null);
+    localStorage.removeItem("bv.railWidth");
+  };
 
   const loadMore = () => {
     if (loadingMoreRef.current || done || loading) return;
     loadingMoreRef.current = true;
     const gen = queryGenRef.current;
-    getLog(repoId, refs, lenRef.current, pageSize)
+    getLog(repoId, refs, lenRef.current, pageSize, query)
       .then((next) => {
         if (gen !== queryGenRef.current) return; // repo/refs switched mid-flight
         if (next.length < pageSize) setDone(true);
@@ -821,7 +854,7 @@ export function CommitGraph({
         onClick={() => toggleExpand(c)}
         onContextMenu={(e) => openMenu(e, c)}
       >
-        <Rail row={row} railW={railW} theme={theme} />
+        {searching ? <span className="w-1.5 shrink-0" /> : <Rail row={row} railW={railW} theme={theme} />}
         <span className="min-w-0 flex-1 truncate text-[12px]" title={c.subject}>
           {c.subject}
         </span>
@@ -838,9 +871,16 @@ export function CommitGraph({
             </span>
           </span>
         )}
-        <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
+        <button
+          title="Copy full hash"
+          onClick={(e) => {
+            e.stopPropagation(); // don't toggle the row
+            copy(c.hash, "Hash copied");
+          }}
+          className="shrink-0 cursor-pointer rounded-sm font-mono text-[10px] text-faint tabular-nums hover:bg-hover hover:text-fg"
+        >
           {c.hash.slice(0, 7)}
-        </span>
+        </button>
         <span className="w-[26px] shrink-0 text-right text-[10px] whitespace-nowrap text-faint tabular-nums">
           {relTime(c.timestamp)}
         </span>
@@ -850,6 +890,19 @@ export function CommitGraph({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
+      <div className="shrink-0 border-b border-edge px-3 py-1.5">
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setSearch("");
+          }}
+          placeholder="Search commit message or hash…"
+          aria-label="Search commits"
+          className="w-full rounded border border-edge bg-panel2 px-2 py-1 text-[12px] outline-none placeholder:text-faint focus:border-accent"
+        />
+      </div>
       <WorkingChanges
         repoId={repoId}
         worktreePath={worktreePath}
@@ -863,7 +916,7 @@ export function CommitGraph({
       <div ref={containerRef} className="h-full overflow-y-auto" onScroll={onScroll}>
         {commits.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[12px] text-faint">
-            {loading ? "Loading commits…" : "No commits"}
+            {loading ? "Loading commits…" : searching ? "No matching commits" : "No commits"}
           </div>
         ) : (
           <div className="relative" style={{ height: totalH }}>
@@ -887,6 +940,18 @@ export function CommitGraph({
           </div>
         )}
       </div>
+      {commits.length > 0 && !searching && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize commit graph"
+          title="Drag to resize graph · double-click to reset"
+          onMouseDown={startRailResize}
+          onDoubleClick={resetRail}
+          className="absolute inset-y-0 z-[5] w-[3px] cursor-col-resize hover:bg-accent/50 active:bg-accent/70"
+          style={{ left: railW - 1 }}
+        />
+      )}
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu)} onClose={() => setMenu(null)} />

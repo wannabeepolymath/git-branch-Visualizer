@@ -380,7 +380,7 @@ pub fn get_branches(repo: &str, include_remotes: bool) -> Result<Vec<BranchInfo>
 /// argv for `git log`. The trailing `--` is load-bearing: without it a ref that
 /// also names a path (branch "docs" + a docs/ directory) either errors as
 /// ambiguous or, once the branch is gone, silently becomes a pathspec filter.
-fn log_args(refs: &[String], skip: u32, limit: u32) -> Vec<String> {
+fn log_args(refs: &[String], skip: u32, limit: u32, query: &str) -> Vec<String> {
     let mut args = vec![
         "log".to_string(),
         format!("--skip={skip}"),
@@ -388,6 +388,11 @@ fn log_args(refs: &[String], skip: u32, limit: u32) -> Vec<String> {
         "--date-order".to_string(),
         format!("--format={LOG_FORMAT}"),
     ];
+    if !query.is_empty() {
+        // Literal, case-insensitive match against the full message (subject + body).
+        args.extend(["--regexp-ignore-case", "--fixed-strings"].map(String::from));
+        args.push(format!("--grep={query}"));
+    }
     if refs.is_empty() {
         args.extend(["--branches", "--remotes", "--tags"].map(String::from));
     } else {
@@ -398,13 +403,28 @@ fn log_args(refs: &[String], skip: u32, limit: u32) -> Vec<String> {
 }
 
 /// Log the union of the given refs. Empty `refs` means all branches/remotes/tags.
+/// A non-empty `query` filters by commit message; a query that is a (≥7 char)
+/// hash prefix of a real commit returns just that commit instead.
 pub fn get_log(
     repo: &str,
     refs: &[String],
     skip: u32,
     limit: u32,
+    query: &str,
 ) -> Result<Vec<CommitInfo>, String> {
-    let out = git_owned(repo, &log_args(refs, skip, limit))?;
+    let query = query.trim();
+    // Hex-only, so it can't smuggle an option into rev-parse.
+    if query.len() >= 7 && query.chars().all(|c| c.is_ascii_hexdigit()) {
+        let spec = format!("{query}^{{commit}}");
+        if let Ok(hash) = git(repo, &["rev-parse", "--verify", "--quiet", &spec]) {
+            if skip > 0 {
+                return Ok(Vec::new());
+            }
+            let out = git(repo, &["log", "-1", &format!("--format={LOG_FORMAT}"), hash.trim()])?;
+            return Ok(out.lines().filter_map(parse_log_line).collect());
+        }
+    }
+    let out = git_owned(repo, &log_args(refs, skip, limit, query))?;
     Ok(out.lines().filter_map(parse_log_line).collect())
 }
 
@@ -754,7 +774,7 @@ mod tests {
     fn log_args_terminate_refs() {
         // explicit refs: "--" keeps a path-shaped branch ("docs") from becoming a pathspec
         assert_eq!(
-            log_args(&["docs".to_string()], 0, 200),
+            log_args(&["docs".to_string()], 0, 200, ""),
             vec![
                 "log",
                 "--skip=0",
@@ -765,9 +785,13 @@ mod tests {
                 "--"
             ]
         );
-        let all = log_args(&[], 10, 50);
+        let all = log_args(&[], 10, 50, "");
         assert_eq!(&all[1..=2], ["--skip=10", "--max-count=50"]);
         assert_eq!(&all[all.len() - 4..], ["--branches", "--remotes", "--tags", "--"]);
+        // a query is one --grep argument, so "--output=x" can't become an option
+        let q = log_args(&[], 0, 50, "--output=x");
+        assert!(q.contains(&"--grep=--output=x".to_string()));
+        assert!(!q.contains(&"--output=x".to_string()));
     }
 
     #[test]

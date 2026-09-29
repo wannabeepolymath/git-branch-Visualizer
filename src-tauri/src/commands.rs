@@ -291,9 +291,10 @@ pub async fn get_log(
     refs: Vec<String>,
     skip: u32,
     limit: u32,
+    query: String,
 ) -> Result<Vec<git::CommitInfo>, String> {
     let path = state.repo_path(&repo_id)?;
-    git::get_log(&path, &refs, skip, limit)
+    git::get_log(&path, &refs, skip, limit, &query)
 }
 
 #[tauri::command]
