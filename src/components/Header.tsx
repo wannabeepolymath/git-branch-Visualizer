@@ -326,7 +326,7 @@ export function Header({
       {!inSettings && (
         <>
           {searchOpen ? (
-            <div className="flex h-6 w-44 min-w-0 shrink items-center gap-1.5 rounded border border-edge bg-panel2 px-1.5 text-faint focus-within:border-accent">
+            <div className="flex h-7 w-72 min-w-0 shrink items-center gap-1.5 rounded border border-edge bg-panel2 px-2 text-faint focus-within:border-accent">
               <SearchIcon />
               <input
                 autoFocus
