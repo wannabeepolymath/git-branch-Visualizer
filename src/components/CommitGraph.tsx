@@ -88,31 +88,48 @@ function Rail({ row, railW, theme }: { row: GraphRow; railW: number; theme: Them
 
 // `full` drops the inline width cap so the whole ref name shows — used in the
 // overflow popover where there's no neighboring content to crowd.
-function RefPill({ r, theme, full }: { r: string; theme: ThemeName; full?: boolean }) {
+function RefPill({
+  r,
+  theme,
+  full,
+  onCopy,
+}: {
+  r: string;
+  theme: ThemeName;
+  full?: boolean;
+  onCopy: (name: string) => void;
+}) {
   const isTag = r.startsWith("tag:");
   const label = isTag ? r.slice(4) : r;
+  const copyProps = {
+    title: `Copy ${label}`,
+    onClick: (e: MouseEvent) => {
+      e.stopPropagation(); // don't toggle the row
+      onCopy(label);
+    },
+  };
   // Terminal drops the pill chrome for bracketed tags — [branch] / <tag>.
   if (theme === "terminal") {
     return (
-      <span
-        title={label}
-        className={`font-mono text-[9.5px] leading-[14px] font-semibold ${
+      <button
+        {...copyProps}
+        className={`cursor-pointer text-left font-mono text-[9.5px] hover:underline leading-[14px] font-semibold ${
           full ? "whitespace-nowrap" : "max-w-[110px] shrink-0 truncate"
         } ${isTag ? "text-tag-fg" : "text-pill-fg"}`}
       >
         {isTag ? `<${label}>` : `[${label}]`}
-      </span>
+      </button>
     );
   }
   return (
-    <span
-      title={label}
-      className={`rounded-sm px-1 text-[9px] leading-[14px] font-medium ${
+    <button
+      {...copyProps}
+      className={`cursor-pointer rounded-sm px-1 text-left text-[9px] hover:brightness-110 leading-[14px] font-medium ${
         full ? "whitespace-nowrap" : "max-w-[76px] shrink-0 truncate"
       } ${isTag ? "bg-tag text-tag-fg" : "bg-pill text-pill-fg"}`}
     >
       {label}
-    </span>
+    </button>
   );
 }
 
@@ -860,14 +877,14 @@ export function CommitGraph({
           {c.subject}
         </span>
         {pills.map((r) => (
-          <RefPill key={r} r={r} theme={theme} />
+          <RefPill key={r} r={r} theme={theme} onCopy={(n) => copy(n, "Name copied")} />
         ))}
         {extraPills > 0 && (
           <span className="group/refs relative shrink-0 cursor-help rounded-sm bg-panel2 px-1 text-[9px] leading-[14px] text-faint transition-colors hover:text-fg">
             +{extraPills}
-            <span className="pointer-events-none absolute top-full right-0 z-20 mt-1 hidden min-w-max flex-col items-start gap-1 rounded-md border border-edge bg-panel p-1.5 shadow-xl shadow-black/20 group-hover/refs:flex">
+            <span className="absolute top-full right-0 z-20 mt-1 hidden before:absolute before:inset-x-0 before:-top-1.5 before:h-1.5 min-w-max flex-col items-start gap-1 rounded-md border border-edge bg-panel p-1.5 shadow-xl shadow-black/20 group-hover/refs:flex">
               {c.refs.slice(2).map((r) => (
-                <RefPill key={r} r={r} theme={theme} full />
+                <RefPill key={r} r={r} theme={theme} full onCopy={(n) => copy(n, "Name copied")} />
               ))}
             </span>
           </span>
