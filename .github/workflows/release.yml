@@ -8,6 +8,10 @@ name: Release
 # tauri-action re-reads latest.json off that release and merges its own platform
 # entries into it (with retries for the race), so the file ends up holding both
 # the darwin and linux-x86_64 entries rather than whichever leg finished last.
+#
+# The release is created as a draft and published by the final job only once
+# both legs succeed. Otherwise the first leg to finish makes it "latest", and
+# updaters on the other platform hit a latest.json missing their entry.
 on:
   push:
     tags: ["v*"]
@@ -77,6 +81,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Branch Visualizer ${{ github.ref_name }}
+          releaseDraft: true
           # Any tag with a hyphen (v1.1.0-rc1, -beta) ships as a prerelease.
           # GitHub excludes those from "latest", which is what the updater endpoint
           # resolves — without this a test tag would become latest.json for every
@@ -87,3 +92,14 @@ jobs:
           # Homebrew compiles from source on the user's machine, where the key
           # doesn't exist and its absence is a hard error.
           args: ${{ matrix.args }} --config src-tauri/tauri.release.conf.json
+
+  # A failed leg leaves the draft unpublished; re-running it re-runs this too.
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
